@@ -88,8 +88,6 @@ async function stakes(msg, key, vote_key, RPC_URL) {
     sendmsg = `<code>CurrentEpoch: ${epochInfo.epoch}\n    Staker  StartEp EndEp  Stake\n${mes}\nAll: ${Math.round(sum, 2)} sol</code>`;
     bot.sendMessage(msg.chat.id, sendmsg, { parse_mode: "HTML" });
   }
-/*   if (accounts.length)
-    console.log(`Sample delegator:`, JSON.stringify(accounts[0])  ); */
 }
 async function balanceinfo(msg, key, vote_key, RPC_URL) {
   const connection = new solanaWeb3.Connection(RPC_URL);
