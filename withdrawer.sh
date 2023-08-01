@@ -1,5 +1,5 @@
 set -e
-BOT_TOKEN=
+BOT_TOKEN=$(grep -v '^#' .env | grep -e "API_KEY_BOT" | sed -e 's/.*=//')
 CHAT_ID=""
 
 vote_account="/root/solana/vote-account-keypair.json"
