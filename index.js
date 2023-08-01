@@ -4,8 +4,8 @@ const TelegramBot = require("node-telegram-bot-api");
 require("dotenv").config();
 const { exec } = require("child_process");
 const { getCookie, setCookie } = require("./cookie.js");
-const { Console } = require("console");
-const { errorMonitor } = require("events");
+//const { Console } = require("console");
+//const { errorMonitor } = require("events");
 const bot = new TelegramBot(process.env.API_KEY_BOT, {
   polling: true,
 });
