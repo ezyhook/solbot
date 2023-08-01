@@ -1,6 +1,6 @@
 set -e
 BOT_TOKEN=$(grep -v '^#' .env | grep -e "API_KEY_BOT" | sed -e 's/.*=//')
-CHAT_ID=""
+CHAT_ID=$(grep -v '^#' .env | grep -e "chatid" | sed -e 's/.*=//')
 
 vote_account="/root/solana/vote-account-keypair.json"
 withdrawer="/root/solana/authorized-withdrawer-keypair.json"
