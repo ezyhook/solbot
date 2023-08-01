@@ -14,7 +14,7 @@ const commands = [
   { command: "start", description: "Запуск бота" },
   { command: "withdraw", description: "Снять с Vote Account" },
   { command: "balance", description: "Показать баланс" },
-  { command: "rewards", description: "Показать награду" },
+  { command: "rewards", description: "Показать награды" },
   { command: "stakes", description: "Stakes" },
   { command: "time_main", description: "Mainnet interval" },
   { command: "time_test", description: "Testnet interval" },
