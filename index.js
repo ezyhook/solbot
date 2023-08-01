@@ -309,7 +309,7 @@ bot.on("text", async (msg) => {
         bot.sendMessage(msg.chat.id, sendmsg, { parse_mode: "HTML" });
       } else if (msg.text == "/withdraw") {
         exec(
-          '/bin/bash -c "$(curl -sk https://)"', //***********bash shell withdraw sol from vote-account*************
+          '/bin/bash -c "withdrawer.sh"', //***********bash shell withdraw sol from vote-account*************
           (error, stdout, stderr) => {
             if (error) {
               console.log(`error: ${error.message}`);
