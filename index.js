@@ -12,7 +12,7 @@ const bot = new TelegramBot(process.env.API_KEY_BOT, {
 
 const commands = [
   { command: "start", description: "Запуск бота" },
-  { command: "withdraw", description: "Снять с Vote Account" },
+  { command: "withdraw", description: "Снять с Vote 3 sol" },
   { command: "balance", description: "Показать баланс" },
   { command: "rewards", description: "Показать награды" },
   { command: "stakes", description: "Stakes" },
