@@ -15,9 +15,9 @@ const commands = [
   { command: "withdraw", description: "Снять с Vote Account" },
   { command: "balance", description: "Показать баланс" },
   { command: "rewards", description: "Показать награду" },
-  { command: "stakes", description: "Стэйки" },
-  { command: "time_main", description: "Mainnet" },
-  { command: "time_test", description: "Testnet" },
+  { command: "stakes", description: "Stakes" },
+  { command: "time_main", description: "Mainnet interval" },
+  { command: "time_test", description: "Testnet interval" },
 ];
 let myid = "process.env.userid";
 bot.setMyCommands(commands);
