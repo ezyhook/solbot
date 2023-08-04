@@ -5,27 +5,23 @@ require("dotenv").config();
 const { exec } = require("child_process");
 let Datastore = require('nedb');
 const dbfile='cookie.json'
-const fs = require('fs');
-if (fs.existsSync(dbfile)) {
-  
-}
 let db = new Datastore({filename : dbfile, autoload: true});
 //const { Console } = require("console");
 //const { errorMonitor } = require("events");
-const bot = new TelegramBot(process.env.API_KEY_BOT, {
+const bot = new TelegramBot(, {
   polling: true,
 });
 
 const commands = [
   { command: "start", description: "Запуск бота" },
-  { command: "withdraw", description: "Снять с Vote Account" },
+  { command: "withdraw", description: "Снять с Vote Account 3sol" },
   { command: "balance", description: "Показать баланс" },
   { command: "rewards", description: "Показать награды" },
   { command: "stakes", description: "Stakes" },
   { command: "time_main", description: "Mainnet interval" },
   { command: "time_test", description: "Testnet interval" },
 ];
-let myid = "274836367";
+let myid = "process.env.userid";
 bot.setMyCommands(commands);
 
 let _round = Math.round;
