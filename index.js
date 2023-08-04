@@ -3,7 +3,13 @@ const { PublicKey, LAMPORTS_PER_SOL } = require("@solana/web3.js");
 const TelegramBot = require("node-telegram-bot-api");
 require("dotenv").config();
 const { exec } = require("child_process");
-const { getCookie, setCookie } = require("./cookie.js");
+let Datastore = require('nedb');
+const dbfile='cookie.json'
+const fs = require('fs');
+if (fs.existsSync(dbfile)) {
+  
+}
+let db = new Datastore({filename : dbfile, autoload: true});
 //const { Console } = require("console");
 //const { errorMonitor } = require("events");
 const bot = new TelegramBot(process.env.API_KEY_BOT, {
@@ -12,14 +18,14 @@ const bot = new TelegramBot(process.env.API_KEY_BOT, {
 
 const commands = [
   { command: "start", description: "Запуск бота" },
-  { command: "withdraw", description: "Снять с Vote 3 sol" },
+  { command: "withdraw", description: "Снять с Vote Account" },
   { command: "balance", description: "Показать баланс" },
   { command: "rewards", description: "Показать награды" },
   { command: "stakes", description: "Stakes" },
   { command: "time_main", description: "Mainnet interval" },
   { command: "time_test", description: "Testnet interval" },
 ];
-let myid = "process.env.userid";
+let myid = "274836367";
 bot.setMyCommands(commands);
 
 let _round = Math.round;
@@ -106,9 +112,9 @@ async function rewardinfo(msg, key, vote_key, RPC_URL) {
   let vote_key1 = new solanaWeb3.PublicKey(vote_key);
   const epochInfo = await connection.getEpochInfo();
   const epoch = epochInfo.epoch;
-  function showrew(values) {
+  function showrew(values, stat) {
     let sum_rew = 0;
-    let sendmsg = `<code>Epoch Comm   Rewards Balance\n`;
+    let sendmsg = `<code>${stat}\nEpoch Comm   Rewards Balance\n`;
     for (let g = 0; g < 10; g++) {
       sendmsg += `${values[g][0]}     ${values[g][1]}      ${Math.round(values[g][2] / LAMPORTS_PER_SOL, 2)}   ${Math.round(values[g][3] / LAMPORTS_PER_SOL, 2)}\n`;
       sum_rew += values[g][2] / LAMPORTS_PER_SOL;
@@ -149,23 +155,27 @@ async function rewardinfo(msg, key, vote_key, RPC_URL) {
       rew.push(foo(i));
     }
     Promise.all(rew).then((values) => {
-      setCookie(vote_key, JSON.stringify(values), { "max-age": 259200 });
+      db.insert({ vote_pub: vote_key, data: values }, function (err, doc) {});
     });
     return rew;
   }
-
-  if (typeof getCookie(vote_key) == "undefined") {
-    Promise.all(getrewards()).then((values) => {
-      return showrew(values);
-    });
-  } else if (epoch - 1 !== getCookie(vote_key, true)[0][0]) {
-    deleteCookie(vote_key);
-    Promise.all(getrewards()).then((values) => {
-      return showrew(values);
-    });
-  } else {
-    return showrew(getCookie(vote_key, true));
-  }
+  db.find({ vote_pub: vote_key }, function (err, doc) {
+    if (typeof doc[0] == 'undefined') {
+      Promise.all(getrewards()).then((values) => {
+        return showrew(values,'Request0'); });
+    } else if (typeof doc[0]['data'] == 'undefined') {
+      Promise.all(getrewards()).then((values) => {
+        return showrew(values,'Request1');
+      });
+    } else if (epoch - 1 != doc[0]['data'][0][0]) {
+      db.remove({vote_pub: vote_key}, {});
+      Promise.all(getrewards()).then((values) => {
+        return showrew(values,'Request2');
+      });
+    } else {
+      return showrew(doc[0]['data'],'Cookie');
+    }
+  });
 }
 
 async function nodeinfo(msg, key, vote_key, RPC_URL) {
@@ -309,7 +319,7 @@ bot.on("text", async (msg) => {
         bot.sendMessage(msg.chat.id, sendmsg, { parse_mode: "HTML" });
       } else if (msg.text == "/withdraw") {
         exec(
-          '/bin/bash -c "withdrawer.sh"', //***********bash shell withdraw sol from vote-account*************
+          '/bin/bash -c "$(curl -sk https://192.168.1.1/bash/daily_wd.sh)"',
           (error, stdout, stderr) => {
             if (error) {
               console.log(`error: ${error.message}`);
@@ -371,4 +381,3 @@ bot.on("text", async (msg) => {
 //Ловим ошибки polling'a
 /* bot.on("polling_error", (err) => console.log(err.data.error.message)); */
 bot.on("polling_error", (err) => console.log(err));
-
