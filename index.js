@@ -5,16 +5,17 @@ require("dotenv").config();
 const { exec } = require("child_process");
 let Datastore = require('nedb');
 const dbfile='cookie.json'
+
 let db = new Datastore({filename : dbfile, autoload: true});
 //const { Console } = require("console");
 //const { errorMonitor } = require("events");
-const bot = new TelegramBot(, {
+const bot = new TelegramBot(process.env.API_KEY_BOT, {
   polling: true,
 });
 
 const commands = [
   { command: "start", description: "Запуск бота" },
-  { command: "withdraw", description: "Снять с Vote Account 3sol" },
+  { command: "withdraw", description: "Снять с Vote Account" },
   { command: "balance", description: "Показать баланс" },
   { command: "rewards", description: "Показать награды" },
   { command: "stakes", description: "Stakes" },
@@ -50,7 +51,7 @@ async function getVoteStatus(identityPublicKey, RPC_URL) {
   }
   throw new Error("Vote account not found");
 }
-async function stakes(msg, key, vote_key, RPC_URL) {
+async function stakes(key, vote_key, RPC_URL) {
   const connection = new solanaWeb3.Connection(RPC_URL);
   const epochInfo = await connection.getEpochInfo();
   const STAKE_PROGRAM_ID = new PublicKey(
@@ -88,10 +89,10 @@ async function stakes(msg, key, vote_key, RPC_URL) {
       mes += `${i+1}. ${st1}..${st2}  ${a_epoch} - ${d_epoch}  ${echo_stake}\n`;
     }
     sendmsg = `<code>CurrentEpoch: ${epochInfo.epoch}\n    Staker  StartEp EndEp  Stake\n${mes}\nAll: ${Math.round(sum, 2)} sol</code>`;
-    bot.sendMessage(msg.chat.id, sendmsg, { parse_mode: "HTML" });
+    return sendmsg;
   }
 }
-async function balanceinfo(msg, key, vote_key, RPC_URL) {
+async function balanceinfo(key, vote_key, RPC_URL) {
   const connection = new solanaWeb3.Connection(RPC_URL);
   const walletKey = new solanaWeb3.PublicKey(key);
   const balance = await connection.getBalance(walletKey);
@@ -101,9 +102,9 @@ async function balanceinfo(msg, key, vote_key, RPC_URL) {
     custake / LAMPORTS_PER_SOL,
     4
   )}</code>`;
-  bot.sendMessage(msg.chat.id, sendmsg, { parse_mode: "HTML" });
+  return sendmsg;
 }
-async function rewardinfo(msg, key, vote_key, RPC_URL) {
+async function rewardinfo(key, vote_key, RPC_URL) {
   const connection = new solanaWeb3.Connection(RPC_URL);
   let vote_key1 = new solanaWeb3.PublicKey(vote_key);
   const epochInfo = await connection.getEpochInfo();
@@ -116,7 +117,7 @@ async function rewardinfo(msg, key, vote_key, RPC_URL) {
       sum_rew += values[g][2] / LAMPORTS_PER_SOL;
     }
     sendmsg += `\n  Sum rewards: ${Math.round(sum_rew, 2)} sol</code>`;
-    bot.sendMessage(msg.chat.id, sendmsg, { parse_mode: "HTML" });
+    return sendmsg;
   }
   function getrewards() {
     let rew = [];
@@ -174,7 +175,7 @@ async function rewardinfo(msg, key, vote_key, RPC_URL) {
   });
 }
 
-async function nodeinfo(msg, key, vote_key, RPC_URL) {
+async function nodeinfo(key, vote_key, RPC_URL) {
   function echotime(secs) {
     let out = [];
     let day = Math.floor(secs / 86400);
@@ -285,8 +286,7 @@ ${normalDate} - ${echo[0]}d ${echo[1]}h ${echo[2]}m ${echo[3]}s
 ${last}
 End epoch:
 ${t_end} - ${echoe[0]}d ${echoe[1]}h ${echoe[2]}m ${echoe[3]}s</code>`;
-
-    bot.sendMessage(msg.chat.id, sendmsg, { parse_mode: "HTML" });
+    return sendmsg;
   } else {
     let echo = [];
     let secs_end_epoh = (end_slot_d - cluster_slot_d) * time_const_d;
@@ -295,10 +295,10 @@ ${t_end} - ${echoe[0]}d ${echoe[1]}h ${echoe[2]}m ${echoe[3]}s</code>`;
     let t_end = new Date(secs_slot).toLocaleString("ru-RU", {
       timeZone: timeZ,
     });
-    sendmsg = `<code>Status node: ${status}\nAll:${all} Done:${Done} Will:${will_done} Skipped:${skipped}\n
+   sendmsg = `<code>Status node: ${status}\nAll:${all} Done:${Done} Will:${will_done} Skipped:${skipped}\n
 All slots Done. End of the epoch:
 ${t_end} - ${echo[0]}d ${echo[1]}h ${echo[2]}m ${echo[3]}s</code>`;
-    bot.sendMessage(msg.chat.id, sendmsg, { parse_mode: "HTML" });
+    return sendmsg;
   }
 } //END NODEINFO
 
@@ -314,8 +314,72 @@ bot.on("text", async (msg) => {
         sendmsg = `<code>Hi ${user} your id: ${userid}, username: ${username}, usertype: ${usertype} </code>`;
         bot.sendMessage(msg.chat.id, sendmsg, { parse_mode: "HTML" });
       } else if (msg.text == "/withdraw") {
+        await bot.sendMessage(msg.chat.id, `Отправляем 3 sol на identity? yes/no`, {
+          reply_markup: {
+              inline_keyboard: [
+                  [{text: 'Да', callback_data: 'wd_yes'}, {text: 'Нет', callback_data: "closeMenu" }]
+              ]
+          },
+          reply_to_message_id: msg.message_id
+        });
+      } else if (msg.text == "/balance") {
+        sendmsg = await balanceinfo(
+          process.env.pubkey_main,
+          process.env.pubkey_vote_main,
+          process.env.RPC_MAIN
+        );
+        bot.sendMessage(msg.chat.id, sendmsg, { parse_mode: "HTML" });
+      } else if (msg.text == "/stakes") {
+        sendmsg = await stakes (
+          process.env.pubkey_main,
+          process.env.pubkey_vote_main,
+          process.env.RPC_MAIN
+        );
+        bot.sendMessage(msg.chat.id, sendmsg, { parse_mode: "HTML" });
+      } else if (msg.text == "/time_main") {
+        sendmsg = await nodeinfo(
+          process.env.pubkey_main,
+          process.env.pubkey_vote_main,
+          process.env.RPC_MAIN
+        );
+        bot.sendMessage(msg.chat.id, sendmsg, { parse_mode: "HTML" });
+      } //END TIME
+      else if (msg.text == "/time_test") {
+        sendmsg = await nodeinfo(
+          process.env.pubkey_test,
+          process.env.pubkey_vote_test,
+          process.env.RPC_TEST
+        );
+        bot.sendMessage(msg.chat.id, sendmsg, { parse_mode: "HTML" });
+      } //END TIME
+      else if (msg.text == "/rewards") {
+        sendmsg = await rewardinfo(
+          process.env.pubkey_main,
+          process.env.pubkey_vote_main,
+          process.env.RPC_MAIN
+        );
+        bot.sendMessage(msg.chat.id, sendmsg, { parse_mode: "HTML" });
+      } //END REWARDS
+    } catch (error) {
+      console.log(error);
+    }
+  } else {
+    bot.sendMessage(msg.chat.id, "Access denied 403", { parse_mode: "HTML" });
+  }
+});
+
+//Обрабатываем коллбеки на инлайн-клавиатуре
+bot.on('callback_query', async ctx => {
+  try {
+    switch(ctx.data) {
+      //Кнопка закрытия меню удаляет сообщение с меню и сообщение, по которому было вызвано меню
+      case "closeMenu":
+          await bot.deleteMessage(ctx.message.chat.id, ctx.message.message_id);
+          await bot.deleteMessage(ctx.message.reply_to_message.chat.id, ctx.message.reply_to_message.message_id);
+          break;
+      case "wd_yes":
         exec(
-          '/bin/bash -c "$(curl -sk https://192.168.1.1/bash/daily_wd.sh)"',
+          '/bin/bash -c "withdrawer.sh"',
           (error, stdout, stderr) => {
             if (error) {
               console.log(`error: ${error.message}`);
@@ -328,51 +392,14 @@ bot.on("text", async (msg) => {
             console.log(`stdout: ${stdout}`);
           }
         );
-      } else if (msg.text == "/balance") {
-        balanceinfo(
-          msg,
-          process.env.pubkey_main,
-          process.env.pubkey_vote_main,
-          process.env.RPC_MAIN
-        );
-        } else if (msg.text == "/stakes") {
-        stakes(
-          msg,
-          process.env.pubkey_main,
-          process.env.pubkey_vote_main,
-          process.env.RPC_MAIN
-        );
-      } else if (msg.text == "/time_main") {
-        nodeinfo(
-          msg,
-          process.env.pubkey_main,
-          process.env.pubkey_vote_main,
-          process.env.RPC_MAIN
-        );
-      } //END TIME
-      else if (msg.text == "/time_test") {
-        nodeinfo(
-          msg,
-          process.env.pubkey_test,
-          process.env.pubkey_vote_test,
-          process.env.RPC_TEST
-        );
-      } //END TIME
-      else if (msg.text == "/rewards") {
-        rewardinfo(
-          msg,
-          process.env.pubkey_main,
-          process.env.pubkey_vote_main,
-          process.env.RPC_MAIN
-        );
-      } //END REWARDS
-    } catch (error) {
-      console.log(error);
-    }
-  } else {
-    bot.sendMessage(msg.chat.id, "Access denied 403", { parse_mode: "HTML" });
+        break;
+      }
   }
-});
+  catch(error) {
+      console.log(error);
+  }
+})
+
 
 //Ловим ошибки polling'a
 /* bot.on("polling_error", (err) => console.log(err.data.error.message)); */
