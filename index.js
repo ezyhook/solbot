@@ -7,8 +7,6 @@ let Datastore = require('nedb');
 const dbfile='cookie.json'
 
 let db = new Datastore({filename : dbfile, autoload: true});
-//const { Console } = require("console");
-//const { errorMonitor } = require("events");
 const bot = new TelegramBot(process.env.API_KEY_BOT, {
   polling: true,
 });
