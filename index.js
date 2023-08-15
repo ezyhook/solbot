@@ -80,7 +80,6 @@ async function stakes(key, vote_key, RPC_URL) {
       a_epoch = accounts[i]["account"]["data"]["parsed"]["info"]["stake"]["delegation"]["activationEpoch"];
       d_epoch = accounts[i]["account"]["data"]["parsed"]["info"]["stake"]["delegation"]["deactivationEpoch"];
       if (d_epoch == 18446744073709551615) {d_epoch = '∞';}
-      //stake = accounts[i]["account"]["data"]["parsed"]["info"]["stake"]["delegation"]["stake"] / LAMPORTS_PER_SOL;
       stake = accounts[i]["account"]["data"]["parsed"]["info"]["stake"]["delegation"]["stake"] / LAMPORTS_PER_SOL;
       echo_stake = Math.round(stake, 4);
       sum += stake;
