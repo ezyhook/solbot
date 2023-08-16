@@ -102,11 +102,9 @@ async function balanceinfo(key, vote_key, RPC_URL) {
   )}</code>`;
   return sendmsg;
 }
-async function rewardinfo(msg, key, vote_key, RPC_URL) {
+async function rewardinfo(key, vote_key, RPC_URL, callBackFn) {
   const connection = new solanaWeb3.Connection(RPC_URL);
   let vote_key1 = new solanaWeb3.PublicKey(vote_key);
-
-  //let db = Datastore.create(dbfile);
   const epochInfo = await connection.getEpochInfo();
   const epoch = epochInfo.epoch;
 
@@ -157,20 +155,25 @@ async function rewardinfo(msg, key, vote_key, RPC_URL) {
     });
     return rew;
   }
-  Promise.all(getrewards()).then((values) => {
+
     db.find({ vote_pub: vote_key }, function (err, doc) {
     if (typeof doc[0] == 'undefined') {
-      bot.sendMessage(msg.chat.id, showrew(values,'Request0'), { parse_mode: "HTML" });
+      Promise.all(getrewards()).then((values) => {
+        callBackFn(showrew(values,'Request0'));
+      });
     } else if (typeof doc[0]['data'] == 'undefined') {
-      bot.sendMessage(msg.chat.id, showrew(values,'Request1'), { parse_mode: "HTML" });
+      Promise.all(getrewards()).then((values) => {
+        callBackFn(showrew(values,'Request1'));
+      });
     } else if (epoch - 1 != doc[0]['data'][0][0]) {
       db.remove({vote_pub: vote_key}, {});
-      bot.sendMessage(msg.chat.id, showrew(values,'Request2'), { parse_mode: "HTML" });
+      Promise.all(getrewards()).then((values) => {
+        callBackFn(showrew(values,'Request2'));
+      });
     } else {
-      bot.sendMessage(msg.chat.id, showrew(doc[0]['data'],'Cookie'), { parse_mode: "HTML" });
+      callBackFn(showrew(doc[0]['data'],'Cookie'));
     }
     });
-  });
 
 }
 
@@ -352,16 +355,14 @@ bot.on("text", async (msg) => {
         bot.sendMessage(msg.chat.id, sendmsg, { parse_mode: "HTML" });
       } //END TIME
       else if (msg.text == "/rewards") {
-        sendmsg = await rewardinfo(
-          msg,
+        await rewardinfo(
           process.env.pubkey_main,
           process.env.pubkey_vote_main,
-          process.env.RPC_MAIN
+          process.env.RPC_MAIN,
+          function (sendmsg){
+            bot.sendMessage(msg.chat.id, sendmsg, { parse_mode: "HTML" });
+          }
         );
-          
-
-          
-        
       } //END REWARDS
     } catch (error) {
       console.log(error);
