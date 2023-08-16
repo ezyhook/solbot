@@ -3,10 +3,10 @@ const { PublicKey, LAMPORTS_PER_SOL } = require("@solana/web3.js");
 const TelegramBot = require("node-telegram-bot-api");
 require("dotenv").config();
 const { exec } = require("child_process");
-let Datastore = require('nedb');
+const Datastore = require('nedb');
+//const Datastore = require('nedb-promises')
 const dbfile='cookie.json'
-
-let db = new Datastore({filename : dbfile, autoload: true});
+let db = new Datastore({filename : dbfile, autoload: true, timestampData: true});
 const bot = new TelegramBot(process.env.API_KEY_BOT, {
   polling: true,
 });
@@ -20,7 +20,7 @@ const commands = [
   { command: "time_main", description: "Mainnet interval" },
   { command: "time_test", description: "Testnet interval" },
 ];
-let myid = "process.env.userid";
+let myid = process.env.userid;
 bot.setMyCommands(commands);
 
 let _round = Math.round;
@@ -80,6 +80,7 @@ async function stakes(key, vote_key, RPC_URL) {
       a_epoch = accounts[i]["account"]["data"]["parsed"]["info"]["stake"]["delegation"]["activationEpoch"];
       d_epoch = accounts[i]["account"]["data"]["parsed"]["info"]["stake"]["delegation"]["deactivationEpoch"];
       if (d_epoch == 18446744073709551615) {d_epoch = '∞';}
+      //stake = accounts[i]["account"]["data"]["parsed"]["info"]["stake"]["delegation"]["stake"] / LAMPORTS_PER_SOL;
       stake = accounts[i]["account"]["data"]["parsed"]["info"]["stake"]["delegation"]["stake"] / LAMPORTS_PER_SOL;
       echo_stake = Math.round(stake, 4);
       sum += stake;
@@ -101,11 +102,14 @@ async function balanceinfo(key, vote_key, RPC_URL) {
   )}</code>`;
   return sendmsg;
 }
-async function rewardinfo(key, vote_key, RPC_URL) {
+async function rewardinfo(msg, key, vote_key, RPC_URL) {
   const connection = new solanaWeb3.Connection(RPC_URL);
   let vote_key1 = new solanaWeb3.PublicKey(vote_key);
+
+  //let db = Datastore.create(dbfile);
   const epochInfo = await connection.getEpochInfo();
   const epoch = epochInfo.epoch;
+
   function showrew(values, stat) {
     let sum_rew = 0;
     let sendmsg = `<code>${stat}\nEpoch Comm   Rewards Balance\n`;
@@ -113,7 +117,7 @@ async function rewardinfo(key, vote_key, RPC_URL) {
       sendmsg += `${values[g][0]}     ${values[g][1]}      ${Math.round(values[g][2] / LAMPORTS_PER_SOL, 2)}   ${Math.round(values[g][3] / LAMPORTS_PER_SOL, 2)}\n`;
       sum_rew += values[g][2] / LAMPORTS_PER_SOL;
     }
-    sendmsg += `\n  Sum rewards: ${Math.round(sum_rew, 2)} sol</code>`;
+    sendmsg += `\n Sum rewards:  ${Math.round(sum_rew, 2)} sol</code>`;
     return sendmsg;
   }
   function getrewards() {
@@ -153,23 +157,21 @@ async function rewardinfo(key, vote_key, RPC_URL) {
     });
     return rew;
   }
-  db.find({ vote_pub: vote_key }, function (err, doc) {
+  Promise.all(getrewards()).then((values) => {
+    db.find({ vote_pub: vote_key }, function (err, doc) {
     if (typeof doc[0] == 'undefined') {
-      Promise.all(getrewards()).then((values) => {
-        return showrew(values,'Request0'); });
+      bot.sendMessage(msg.chat.id, showrew(values,'Request0'), { parse_mode: "HTML" });
     } else if (typeof doc[0]['data'] == 'undefined') {
-      Promise.all(getrewards()).then((values) => {
-        return showrew(values,'Request1');
-      });
+      bot.sendMessage(msg.chat.id, showrew(values,'Request1'), { parse_mode: "HTML" });
     } else if (epoch - 1 != doc[0]['data'][0][0]) {
       db.remove({vote_pub: vote_key}, {});
-      Promise.all(getrewards()).then((values) => {
-        return showrew(values,'Request2');
-      });
+      bot.sendMessage(msg.chat.id, showrew(values,'Request2'), { parse_mode: "HTML" });
     } else {
-      return showrew(doc[0]['data'],'Cookie');
+      bot.sendMessage(msg.chat.id, showrew(doc[0]['data'],'Cookie'), { parse_mode: "HTML" });
     }
+    });
   });
+
 }
 
 async function nodeinfo(key, vote_key, RPC_URL) {
@@ -351,11 +353,15 @@ bot.on("text", async (msg) => {
       } //END TIME
       else if (msg.text == "/rewards") {
         sendmsg = await rewardinfo(
+          msg,
           process.env.pubkey_main,
           process.env.pubkey_vote_main,
           process.env.RPC_MAIN
         );
-        bot.sendMessage(msg.chat.id, sendmsg, { parse_mode: "HTML" });
+          
+
+          
+        
       } //END REWARDS
     } catch (error) {
       console.log(error);
