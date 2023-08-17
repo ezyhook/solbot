@@ -2,6 +2,7 @@
 
 Nodejs up 18 version
 
+<code>
 cd solbot
 
 npm i
@@ -13,3 +14,4 @@ pm2 start index.js
 pm2 save
 
 pm2 startup
+</code>
