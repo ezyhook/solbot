@@ -31,6 +31,17 @@ Math.round = function (number, decimals /* optional, default 0 */) {
   let multiplier = Math.pow(10, decimals);
   return _round(number * multiplier) / multiplier;
 };
+async function getNode(identityPublicKey, RPC_URL) {
+  const connection = new solanaWeb3.Connection(RPC_URL);
+  const nodes = await connection.getClusterNodes();
+  
+  for (const mynode of nodes) {
+    if (mynode.pubkey === identityPublicKey) {
+      return `v${mynode.version}\nGossip: ${mynode.gossip}`;
+    }
+  }
+  throw new Error("Vote account not found");
+}
 
 async function getVoteStatus(identityPublicKey, RPC_URL) {
   const connection = new solanaWeb3.Connection(RPC_URL);
@@ -80,7 +91,6 @@ async function stakes(key, vote_key, RPC_URL) {
       a_epoch = accounts[i]["account"]["data"]["parsed"]["info"]["stake"]["delegation"]["activationEpoch"];
       d_epoch = accounts[i]["account"]["data"]["parsed"]["info"]["stake"]["delegation"]["deactivationEpoch"];
       if (d_epoch == 18446744073709551615) {d_epoch = '∞';}
-      //stake = accounts[i]["account"]["data"]["parsed"]["info"]["stake"]["delegation"]["stake"] / LAMPORTS_PER_SOL;
       stake = accounts[i]["account"]["data"]["parsed"]["info"]["stake"]["delegation"]["stake"] / LAMPORTS_PER_SOL;
       echo_stake = Math.round(stake, 4);
       sum += stake;
@@ -282,7 +292,7 @@ async function nodeinfo(key, vote_key, RPC_URL) {
     let t_end = new Date(secs_slot_end).toLocaleString("ru-RU", {
       timeZone: timeZ,
     });
-    sendmsg = `<code>Status node: ${status}\nAll:${all} Done:${Done} Will:${will_done} Skipped:${skipped}\n
+    sendmsg = `<code>Status node: ${status} ${await getNode(key, RPC_URL)}\n\nBlock production:\nAll:${all} Done:${Done} Will:${will_done} Skipped:${skipped}\n
 Next block:
 ${normalDate} - ${echo[0]}d ${echo[1]}h ${echo[2]}m ${echo[3]}s
 ${last}
@@ -297,7 +307,7 @@ ${t_end} - ${echoe[0]}d ${echoe[1]}h ${echoe[2]}m ${echoe[3]}s</code>`;
     let t_end = new Date(secs_slot).toLocaleString("ru-RU", {
       timeZone: timeZ,
     });
-   sendmsg = `<code>Status node: ${status}\nAll:${all} Done:${Done} Will:${will_done} Skipped:${skipped}\n
+   sendmsg = `<code>Status node: ${status} ${await getNode(key, RPC_URL)}\n\nBlock production:\nAll:${all} Done:${Done} Will:${will_done} Skipped:${skipped}\n
 All slots Done. End of the epoch:
 ${t_end} - ${echo[0]}d ${echo[1]}h ${echo[2]}m ${echo[3]}s</code>`;
     return sendmsg;
@@ -376,7 +386,6 @@ bot.on("text", async (msg) => {
 bot.on('callback_query', async ctx => {
   try {
     switch(ctx.data) {
-      //Кнопка закрытия меню удаляет сообщение с меню и сообщение, по которому было вызвано меню
       case "closeMenu":
           await bot.deleteMessage(ctx.message.chat.id, ctx.message.message_id);
           await bot.deleteMessage(ctx.message.reply_to_message.chat.id, ctx.message.reply_to_message.message_id);
@@ -404,7 +413,4 @@ bot.on('callback_query', async ctx => {
   }
 })
 
-
-//Ловим ошибки polling'a
-/* bot.on("polling_error", (err) => console.log(err.data.error.message)); */
-bot.on("polling_error", (err) => console.log(err));
+bot.on("polling_error", (err) => console.log(err.data.error.message));
