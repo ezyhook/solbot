@@ -4,7 +4,6 @@ const TelegramBot = require("node-telegram-bot-api");
 require("dotenv").config();
 const { exec } = require("child_process");
 const Datastore = require('nedb');
-//const Datastore = require('nedb-promises')
 const dbfile='cookie.json'
 let db = new Datastore({filename : dbfile, autoload: true, timestampData: true});
 const bot = new TelegramBot(process.env.API_KEY_BOT, {
