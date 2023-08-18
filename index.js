@@ -12,7 +12,7 @@ const bot = new TelegramBot(process.env.API_KEY_BOT, {
 
 const commands = [
   { command: "start", description: "Запуск бота" },
-  { command: "withdraw", description: "Снять с vote 3 sol" },
+  { command: "withdraw", description: "Снять с Vote Account" },
   { command: "balance", description: "Показать баланс" },
   { command: "rewards", description: "Показать награды" },
   { command: "stakes", description: "Stakes" },
@@ -41,6 +41,40 @@ async function getNode(identityPublicKey, RPC_URL) {
   }
   throw new Error("Vote account not found");
 }
+async function WithdrawFromVote(key_prkey1, vote_key1, prkey_authoriz, RPC_URL) {
+  const connection = new solanaWeb3.Connection(RPC_URL);
+  const vote_key = new solanaWeb3.PublicKey(vote_key1);
+
+  var stringToArray2 = prkey_authoriz.replace('[', '').replace(']', '').split(',');
+  let prkey_auth = Uint8Array.from(stringToArray2);
+  var stringToArray3 = key_prkey1.replace('[', '').replace(']', '').split(',');
+  let prkey_key = Uint8Array.from(stringToArray3);
+
+  const auth = solanaWeb3.Keypair.fromSecretKey(prkey_auth);
+  const receiver = solanaWeb3.Keypair.fromSecretKey(prkey_key);
+
+  let amo = 3*LAMPORTS_PER_SOL;
+
+  params = {
+    authorizedWithdrawerPubkey: auth.publicKey,
+    lamports: amo,
+    toPubkey: receiver.publicKey,
+    votePubkey: vote_key,
+  };
+  const transaction = new solanaWeb3.Transaction().add(
+    solanaWeb3.VoteProgram.withdraw(params)
+  );
+  let blockhash = await connection
+  .getLatestBlockhash()
+  .then((res) => res.blockhash);
+
+  transaction.feePayer = receiver.publicKey;
+  transaction.recentBlockhash =  blockhash;
+
+  const signature = await connection.sendTransaction(transaction, [receiver, auth]);
+  console.log(signature);
+  return `<code>🟢 Withdrawed 3 SOL. Transaction signature: ${signature}</code>`;
+}       
 
 async function getVoteStatus(identityPublicKey, RPC_URL) {
   const connection = new solanaWeb3.Connection(RPC_URL);
@@ -101,14 +135,17 @@ async function stakes(key, vote_key, RPC_URL) {
 }
 async function balanceinfo(key, vote_key, RPC_URL) {
   const connection = new solanaWeb3.Connection(RPC_URL);
-  const walletKey = new solanaWeb3.PublicKey(key);
-  const balance = await connection.getBalance(walletKey);
-  const solBalance = Math.round(balance / LAMPORTS_PER_SOL, 4);
+  const walletKey1 = new solanaWeb3.PublicKey(key);
+  const walletKey2 = new solanaWeb3.PublicKey(vote_key);
+  const balance1 = await connection.getBalance(walletKey1);
+  const balance2 = await connection.getBalance(walletKey2);
+  const solBalance1 = Math.round(balance1 / LAMPORTS_PER_SOL, 4);
+  const solBalance2 = Math.round(balance2 / LAMPORTS_PER_SOL, 4);
   const { custake } = await getVoteStatus(key, RPC_URL);
-  let sendmsg = `<code>Identity Balance: ${solBalance}\nActivatedStake: ${Math.round(
+  let sendmsg = `<code>Identity balance: ${solBalance1} sol\nVote account balance: ${solBalance2} sol\nActivatedStake: ${Math.round(
     custake / LAMPORTS_PER_SOL,
     4
-  )}</code>`;
+  )} sol</code>`;
   return sendmsg;
 }
 async function rewardinfo(key, vote_key, RPC_URL, callBackFn) {
@@ -324,8 +361,9 @@ bot.on("text", async (msg) => {
         let usertype = msg.from.usertype;
         sendmsg = `<code>Hi ${user} your id: ${userid}, username: ${username}, usertype: ${usertype} </code>`;
         bot.sendMessage(msg.chat.id, sendmsg, { parse_mode: "HTML" });
+
       } else if (msg.text == "/withdraw") {
-        await bot.sendMessage(msg.chat.id, `Отправляем 3 sol на identity? yes/no`, {
+        await bot.sendMessage(msg.chat.id, `Снимаем vote account 3 SOL? yes/no`, {
           reply_markup: {
               inline_keyboard: [
                   [{text: 'Да', callback_data: 'wd_yes'}, {text: 'Нет', callback_data: "closeMenu" }]
@@ -381,7 +419,7 @@ bot.on("text", async (msg) => {
   }
 });
 
-//Обрабатываем коллбеки на инлайн-клавиатуре
+
 bot.on('callback_query', async ctx => {
   try {
     switch(ctx.data) {
@@ -389,22 +427,17 @@ bot.on('callback_query', async ctx => {
           await bot.deleteMessage(ctx.message.chat.id, ctx.message.message_id);
           await bot.deleteMessage(ctx.message.reply_to_message.chat.id, ctx.message.reply_to_message.message_id);
           break;
+
       case "wd_yes":
-        exec(
-          '/bin/bash -c "withdrawer.sh"',
-          (error, stdout, stderr) => {
-            if (error) {
-              console.log(`error: ${error.message}`);
-              return;
-            }
-            if (stderr) {
-              console.log(`stderr: ${stderr}`);
-              return;
-            }
-            console.log(`stdout: ${stdout}`);
-          }
-        );
-        break;
+        await bot.deleteMessage(ctx.message.chat.id, ctx.message.message_id);
+        await bot.deleteMessage(ctx.message.reply_to_message.chat.id, ctx.message.reply_to_message.message_id);
+        sendmsg = await WithdrawFromVote(
+          process.env.prkey_ident_main,
+          process.env.pubkey_vote_main,
+          process.env.prkey_authoriz_main,
+          process.env.RPC_MAIN);
+          await bot.sendMessage(ctx.message.chat.id, sendmsg, { parse_mode: "HTML" });
+      break;
       }
   }
   catch(error) {
@@ -412,4 +445,5 @@ bot.on('callback_query', async ctx => {
   }
 })
 
-bot.on("polling_error", (err) => console.log(err.data.error.message));
+
+bot.on("polling_error", (err) => console.log(err));
