@@ -93,6 +93,17 @@ async function getVoteStatus(identityPublicKey, RPC_URL) {
   }
   throw new Error("Vote account not found");
 }
+function sortArrayOfObjects(arrayToSort, key) {
+  function compareObjects(a, b) {
+      if (a[key] > b[key])
+          return -1;
+      if (a[key] < b[key])
+          return 1;
+      return 0;
+  }
+
+  return arrayToSort.sort(compareObjects);
+}
 async function stakes(key, vote_key, RPC_URL) {
   const connection = new solanaWeb3.Connection(RPC_URL);
   const epochInfo = await connection.getEpochInfo();
@@ -117,17 +128,25 @@ async function stakes(key, vote_key, RPC_URL) {
     let st1, st2, staker, a_epoch, d_epoch, stake, echo_stake;
     let sum = 0;
     let mes = "";
+    let arrmes=[];
     for (let i=0; i < accounts.length; i++) {
+      let out = [];
       staker = accounts[i]["account"]["data"]["parsed"]["info"]["meta"]["authorized"]["staker"];
-      st1 = staker.slice(0,3);
-      st2 = staker.slice(-4);
       a_epoch = accounts[i]["account"]["data"]["parsed"]["info"]["stake"]["delegation"]["activationEpoch"];
       d_epoch = accounts[i]["account"]["data"]["parsed"]["info"]["stake"]["delegation"]["deactivationEpoch"];
       if (d_epoch == 18446744073709551615) {d_epoch = '∞';}
       stake = accounts[i]["account"]["data"]["parsed"]["info"]["stake"]["delegation"]["stake"] / LAMPORTS_PER_SOL;
       echo_stake = Math.round(stake, 4);
       sum += stake;
-      mes += `${i+1}. ${st1}..${st2}  ${a_epoch} - ${d_epoch}  ${echo_stake}\n`;
+      out.push(staker, a_epoch, d_epoch, echo_stake);
+      arrmes.push(out);
+    }
+    let arrmes2 =[];
+    arrmes2 = sortArrayOfObjects(arrmes, 1);
+    for (let g=0; g < accounts.length; g++) {
+      st1 = arrmes2[g][0].slice(0,3);
+      st2 = arrmes2[g][0].slice(-4);
+      mes += `${g+1}. ${st1}..${st2}  ${arrmes2[g][1]} - ${arrmes2[g][2]}  ${arrmes2[g][3]}\n`;
     }
     sendmsg = `<code>CurrentEpoch: ${epochInfo.epoch}\n    Staker  StartEp EndEp  Stake\n${mes}\nAll: ${Math.round(sum, 2)} sol</code>`;
     return sendmsg;
@@ -424,9 +443,9 @@ bot.on('callback_query', async ctx => {
   try {
     switch(ctx.data) {
       case "closeMenu":
-        await bot.deleteMessage(ctx.message.chat.id, ctx.message.message_id);
-        await bot.deleteMessage(ctx.message.reply_to_message.chat.id, ctx.message.reply_to_message.message_id);
-        break;
+          await bot.deleteMessage(ctx.message.chat.id, ctx.message.message_id);
+          await bot.deleteMessage(ctx.message.reply_to_message.chat.id, ctx.message.reply_to_message.message_id);
+          break;
 
       case "wd_yes":
         await bot.deleteMessage(ctx.message.chat.id, ctx.message.message_id);
@@ -437,7 +456,7 @@ bot.on('callback_query', async ctx => {
           process.env.prkey_authoriz_main,
           process.env.RPC_MAIN);
         await bot.sendMessage(ctx.message.chat.id, sendmsg, { parse_mode: "HTML" });
-        break;
+      break;
       }
   }
   catch(error) {
