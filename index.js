@@ -424,9 +424,9 @@ bot.on('callback_query', async ctx => {
   try {
     switch(ctx.data) {
       case "closeMenu":
-          await bot.deleteMessage(ctx.message.chat.id, ctx.message.message_id);
-          await bot.deleteMessage(ctx.message.reply_to_message.chat.id, ctx.message.reply_to_message.message_id);
-          break;
+        await bot.deleteMessage(ctx.message.chat.id, ctx.message.message_id);
+        await bot.deleteMessage(ctx.message.reply_to_message.chat.id, ctx.message.reply_to_message.message_id);
+        break;
 
       case "wd_yes":
         await bot.deleteMessage(ctx.message.chat.id, ctx.message.message_id);
@@ -436,8 +436,8 @@ bot.on('callback_query', async ctx => {
           process.env.pubkey_vote_main,
           process.env.prkey_authoriz_main,
           process.env.RPC_MAIN);
-          await bot.sendMessage(ctx.message.chat.id, sendmsg, { parse_mode: "HTML" });
-      break;
+        await bot.sendMessage(ctx.message.chat.id, sendmsg, { parse_mode: "HTML" });
+        break;
       }
   }
   catch(error) {
