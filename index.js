@@ -16,8 +16,8 @@ const commands = [
   { command: "balance", description: "Показать баланс" },
   { command: "rewards", description: "Показать награды" },
   { command: "stakes", description: "Stakes" },
-  { command: "time_main", description: "Mainnet interval" },
-  { command: "time_test", description: "Testnet interval" },
+  { command: "time_main", description: "Mainnet block production" },
+  { command: "time_test", description: "Testnet block production" },
 ];
 let myid = process.env.userid;
 bot.setMyCommands(commands);
