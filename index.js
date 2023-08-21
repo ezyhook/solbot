@@ -12,6 +12,7 @@ const bot = new TelegramBot(process.env.API_KEY_BOT, {
 
 const commands = [
   { command: "start", description: "Запуск бота" },
+  { command: "menu", description: "Меню бота" },
   { command: "withdraw", description: "Снять с Vote Account 3 SOL" },
   { command: "balance", description: "Показать баланс" },
   { command: "rewards", description: "Показать награды" },
@@ -380,7 +381,26 @@ bot.on("text", async (msg) => {
         let usertype = msg.from.usertype;
         sendmsg = `<code>Hi ${user} your id: ${userid}, username: ${username}, usertype: ${usertype} </code>`;
         bot.sendMessage(msg.chat.id, sendmsg, { parse_mode: "HTML" });
-
+      } else if(msg.text == '/menu') {
+        await bot.sendMessage(msg.chat.id, 'Menu is open -->', {
+            reply_markup: {
+                keyboard: [
+                    ['/start', '/balance'],
+                    ['/withdraw'],
+                    ['/stakes', '/rewards'],
+                    ['/time_test', '/time_main'],
+                    ['❌ Закрыть меню']
+                ],
+                resize_keyboard: true,
+                one_time_keyboard: true
+            }
+        });
+      } else if(msg.text == '❌ Закрыть меню') {
+          await bot.sendMessage(msg.chat.id, '--> Menu is closed', {
+              reply_markup: {
+                  remove_keyboard: true
+              }
+        });
       } else if (msg.text == "/withdraw") {
         await bot.sendMessage(msg.chat.id, `Снимаем vote account 3 SOL? yes/no`, {
           reply_markup: {
@@ -389,7 +409,7 @@ bot.on("text", async (msg) => {
               ]
           },
           reply_to_message_id: msg.message_id
-        });
+        });  
       } else if (msg.text == "/balance") {
         sendmsg = await balanceinfo(
           process.env.pubkey_main,
