@@ -1,8 +1,7 @@
 const solanaWeb3 = require("@solana/web3.js");
-const { PublicKey, LAMPORTS_PER_SOL } = require("@solana/web3.js");
+const { PublicKey, LAMPORTS_PER_SOL, Transaction, sendAndConfirmTransaction, Keypair} = require("@solana/web3.js");
 const TelegramBot = require("node-telegram-bot-api");
 require("dotenv").config();
-const { exec } = require("child_process");
 const Datastore = require('nedb');
 const dbfile='cookie.json'
 let db = new Datastore({filename : dbfile, autoload: true, timestampData: true});
@@ -11,18 +10,44 @@ const bot = new TelegramBot(process.env.API_KEY_BOT, {
 });
 
 const commands = [
-  { command: "start", description: "Запуск бота" },
-  { command: "menu", description: "Меню бота" },
-  { command: "withdraw", description: "Снять с Vote Account 3 SOL" },
-  { command: "balance", description: "Показать баланс" },
-  { command: "rewards", description: "Показать награды" },
-  { command: "stakes", description: "Stakes" },
+  { command: "start", description: "Start bot" },
+  { command: "menu", description: "Bot menu" },
+  { command: "withdraw", description: "Снять на голосование 3 SOL" },
+  { command: "withdraw_vo_to", description: "Отправить SOL с vote" },
+  { command: "withdraw_id_to", description: "Отправить SOL с identity" },
+  { command: "balance", description: "Show balance" },
+  { command: "rewards", description: "Show rewards for 10 epoch" },
+  { command: "stakes", description: "Show stakes" },
   { command: "time_main", description: "Mainnet block production" },
   { command: "time_test", description: "Testnet block production" },
 ];
 let myid = process.env.userid;
 bot.setMyCommands(commands);
 
+/* Основные параметры */
+const clusterParams = {
+  test: [process.env.pubkey_test, process.env.pubkey_vote_test, process.env.RPC_TEST],
+  main: [process.env.pubkey_main, process.env.pubkey_vote_main, process.env.RPC_MAIN],
+  withdraw_test: [process.env.prkey_ident_test, process.env.pubkey_vote_test, process.env.prkey_authoriz_test, process.env.RPC_TEST],
+  withdraw_main: [process.env.prkey_ident_main, process.env.pubkey_vote_main, process.env.prkey_authoriz_main, process.env.RPC_MAIN],
+  send_test: [process.env.prkey_ident_test, process.env.RPC_TEST],
+  send_main: [process.env.prkey_ident_main, process.env.RPC_MAIN]
+}
+
+/*------Определение параметров ---------------*/
+let current_params, withdraw_params;
+if (process.env.cluster == 'main') {
+  current_params = clusterParams.main;
+  withdraw_params = clusterParams.withdraw_main;
+  send_params = clusterParams.send_main;
+} else {
+  current_params = clusterParams.test;
+  withdraw_params = clusterParams.withdraw_test;
+  send_params = clusterParams.send_test;
+}
+/*--------------------------------------------*/
+
+//Функция округления
 let _round = Math.round;
 Math.round = function (number, decimals /* optional, default 0 */) {
   if (arguments.length == 1) {
@@ -31,39 +56,95 @@ Math.round = function (number, decimals /* optional, default 0 */) {
   let multiplier = Math.pow(10, decimals);
   return _round(number * multiplier) / multiplier;
 };
+//Функция инфо по ноде
 async function getNode(identityPublicKey, RPC_URL) {
   const connection = new solanaWeb3.Connection(RPC_URL);
   const nodes = await connection.getClusterNodes();
-  
-  for (const mynode of nodes) {
-    if (mynode.pubkey === identityPublicKey) {
-      return `v${mynode.version}\nGossip: ${mynode.gossip}`;
+  try {
+    for (const mynode of nodes) {
+      if (mynode.pubkey === identityPublicKey) {
+        return `v${mynode.version}\nGossip: ${mynode.gossip}`;
+      }
     }
   }
-  throw new Error("Vote account not found");
+    catch(error) { 
+      return `🔴 Node ${mynode.pubkey} undefined.`;
+  }
 }
-async function WithdrawFromVote(key_prkey1, vote_key1, prkey_authoriz, RPC_URL) {
+
+//Функция провеки публичного ключа
+async function checkkey(key1){
+    try {
+      const key = new solanaWeb3.PublicKey(key1);
+      if (await solanaWeb3.PublicKey.isOnCurve(key) == true) {
+        return true;
+      } else {
+      return false;
+      }
+    } 
+    catch(error) {
+      return false;
+    }
+}
+
+//Функция выполение транзакции с identity в сторонний кошелек
+async function WithdrawFromIdentity([key_prkey1, RPC_URL], receiver3_1, sol){
   const connection = new solanaWeb3.Connection(RPC_URL);
-  const vote_key = new solanaWeb3.PublicKey(vote_key1);
+
+  var stringToArray3 = key_prkey1.replace('[', '').replace(']', '').split(',');
+  let prkey_key = Uint8Array.from(stringToArray3);
+
+  const feepayer = Keypair.fromSecretKey(prkey_key);
+  const receiver3 = new PublicKey(receiver3_1);
+  let amount = sol*LAMPORTS_PER_SOL;
+
+  const transferTransaction = new Transaction().add(
+    solanaWeb3.SystemProgram.transfer({
+      fromPubkey: feepayer.publicKey,
+      toPubkey: receiver3,
+      lamports: amount,
+    })
+  );
+  
+  const signature = await sendAndConfirmTransaction(connection, transferTransaction, [feepayer]);
+
+  return `<code>🟢 You sent ${sol} SOL to ${receiver3_1}.\n\nTransaction signature: ${signature}</code>`;
+}
+
+//Функция выполение транзакции по снятию с vote account
+async function WithdrawFromVote([key_prkey1, vote_key1, prkey_authoriz, RPC_URL], receiver2_1, sol) {
+  const connection = new solanaWeb3.Connection(RPC_URL);
+  const vote_key = new PublicKey(vote_key1);
 
   var stringToArray2 = prkey_authoriz.replace('[', '').replace(']', '').split(',');
   let prkey_auth = Uint8Array.from(stringToArray2);
   var stringToArray3 = key_prkey1.replace('[', '').replace(']', '').split(',');
-  let prkey_key = Uint8Array.from(stringToArray3);
-
-  const auth = solanaWeb3.Keypair.fromSecretKey(prkey_auth);
-  const receiver = solanaWeb3.Keypair.fromSecretKey(prkey_key);
-
-  let amo = 3*LAMPORTS_PER_SOL;
-
-  params = {
-    authorizedWithdrawerPubkey: auth.publicKey,
-    lamports: amo,
-    toPubkey: receiver.publicKey,
-    votePubkey: vote_key,
-  };
-  const transaction = new solanaWeb3.Transaction().add(
-    solanaWeb3.VoteProgram.withdraw(params)
+  let prkey_key = Uint8Array.from(stringToArray3);  
+  const auth = Keypair.fromSecretKey(prkey_auth);
+  const receiver = Keypair.fromSecretKey(prkey_key);
+  const votebalance = await connection.getBalance(vote_key);
+  const votebalanceLimit = 2; 
+  let amount = sol*LAMPORTS_PER_SOL;
+  
+  if (receiver2_1 == null) {
+    params = {
+      authorizedWithdrawerPubkey: auth.publicKey,
+      lamports: amount,
+      toPubkey: receiver.publicKey,
+      votePubkey: vote_key,
+    };
+  } else {
+    const receiver2 = new PublicKey(receiver2_1);
+    params = {
+      authorizedWithdrawerPubkey: auth.publicKey,
+      lamports: amount,
+      toPubkey: receiver2,
+      votePubkey: vote_key,
+    };
+  }
+  try {
+  const transaction = new Transaction().add(
+    solanaWeb3.VoteProgram.safeWithdraw(params, votebalance, votebalanceLimit*LAMPORTS_PER_SOL)
   );
   let blockhash = await connection
   .getLatestBlockhash()
@@ -73,27 +154,36 @@ async function WithdrawFromVote(key_prkey1, vote_key1, prkey_authoriz, RPC_URL) 
   transaction.recentBlockhash =  blockhash;
 
   const signature = await connection.sendTransaction(transaction, [receiver, auth]);
-  console.log(signature);
-  return `<code>🟢 Withdrawed 3 SOL. Transaction signature: ${signature}</code>`;
-}       
 
+  return `<code>🟢 Withdrawed ${sol} SOL to ${params.toPubkey}.\n\nTransaction signature: ${signature}</code>`;
+  }
+  catch(error) {
+    return `<code>🔴 Withdraw will leave vote account with insufficient funds. ${votebalanceLimit} SOL need for paying rent.\nYou can withdraw max: ${(votebalance - votebalanceLimit*LAMPORTS_PER_SOL)/LAMPORTS_PER_SOL} SOL.\nTransaction stoped.</code>`;
+  }
+}       
+//Функция определения статуса валидатора
 async function getVoteStatus(identityPublicKey, RPC_URL) {
   const connection = new solanaWeb3.Connection(RPC_URL);
   const voteAccounts = await connection.getVoteAccounts();
-  for (const account of voteAccounts.current) {
-    if (account.nodePubkey === identityPublicKey) {
-      let stake = account.activatedStake;
-      return { status_voit: false, custake: stake };
+  try {
+    for (const account of voteAccounts.current) {
+      if (account.nodePubkey === identityPublicKey) {
+        let stake = account.activatedStake;
+        return { status_voit: false, custake: stake };
+      }
+    }
+    for (const account of voteAccounts.delinquent) {
+      if (account.nodePubkey === identityPublicKey) {
+        let stake = account.activatedStake;
+        return { status_voit: true, custake: stake };
+      }
     }
   }
-  for (const account of voteAccounts.delinquent) {
-    if (account.nodePubkey === identityPublicKey) {
-      let stake = account.activatedStake;
-      return { status_voit: true, custake: stake };
-    }
+  catch(error) {
+    return `🔴 Vote Account ${identityPublicKey} undefined.`;
   }
-  throw new Error("Vote account not found");
 }
+//Функция сортировки объекта
 function sortArrayOfObjects(arrayToSort, key) {
   function compareObjects(a, b) {
       if (a[key] > b[key])
@@ -105,7 +195,8 @@ function sortArrayOfObjects(arrayToSort, key) {
 
   return arrayToSort.sort(compareObjects);
 }
-async function stakes(key, vote_key, RPC_URL) {
+//Функция определения делегированых на валидатора стэйков
+async function stakes([key, vote_key, RPC_URL]) {
   const connection = new solanaWeb3.Connection(RPC_URL);
   const epochInfo = await connection.getEpochInfo();
   const STAKE_PROGRAM_ID = new PublicKey(
@@ -153,7 +244,8 @@ async function stakes(key, vote_key, RPC_URL) {
     return sendmsg;
   }
 }
-async function balanceinfo(key, vote_key, RPC_URL) {
+//Функция по определению балансов валидатора
+async function balanceinfo([key, vote_key, RPC_URL]) {
   const connection = new solanaWeb3.Connection(RPC_URL);
   const walletKey1 = new solanaWeb3.PublicKey(key);
   const walletKey2 = new solanaWeb3.PublicKey(vote_key);
@@ -168,7 +260,8 @@ async function balanceinfo(key, vote_key, RPC_URL) {
   )} sol</code>`;
   return sendmsg;
 }
-async function rewardinfo(key, vote_key, RPC_URL, callBackFn) {
+//Функция по определению наград полученных валидатором на vote account
+async function rewardinfo([key, vote_key, RPC_URL], callBackFn) {
   const connection = new solanaWeb3.Connection(RPC_URL);
   let vote_key1 = new solanaWeb3.PublicKey(vote_key);
   const epochInfo = await connection.getEpochInfo();
@@ -242,8 +335,8 @@ async function rewardinfo(key, vote_key, RPC_URL, callBackFn) {
     });
 
 }
-
-async function nodeinfo(key, vote_key, RPC_URL) {
+//Функция для определению производительности ноды
+async function nodeinfo([key, vote_key, RPC_URL]) {
   function echotime(secs) {
     let out = [];
     let day = Math.floor(secs / 86400);
@@ -370,16 +463,13 @@ ${t_end} - ${echo[0]}d ${echo[1]}h ${echo[2]}m ${echo[3]}s</code>`;
   }
 } //END NODEINFO
 
+//Обработка текстовых сообщений ботом
 bot.on("text", async (msg) => {
   let sendmsg;
   if (msg.from.id == myid) {
     try {
       if (msg.text.startsWith("/start")) {
-        let userid = msg.from.id;
-        let user = msg.from.first_name;
-        let username = msg.from.username;
-        let usertype = msg.from.usertype;
-        sendmsg = `<code>Hi ${user} your id: ${userid}, username: ${username}, usertype: ${usertype} </code>`;
+        sendmsg = `<code>Hi ${msg.from.first_name} your id: ${msg.from.id}, username: ${msg.from.username}\nCurrent cluster:${process.env.cluster}</code>`;
         bot.sendMessage(msg.chat.id, sendmsg, { parse_mode: "HTML" });
       } else if(msg.text == '/menu') {
         await bot.sendMessage(msg.chat.id, 'Menu is open -->', {
@@ -387,6 +477,7 @@ bot.on("text", async (msg) => {
                 keyboard: [
                     ['/start', '/balance'],
                     ['/withdraw'],
+                    ['/withdraw_id_to', '/withdraw_vo_to'],
                     ['/stakes', '/rewards'],
                     ['/time_test', '/time_main'],
                     ['❌ Закрыть меню']
@@ -402,49 +493,57 @@ bot.on("text", async (msg) => {
               }
         });
       } else if (msg.text == "/withdraw") {
-        await bot.sendMessage(msg.chat.id, `Снимаем vote account 3 SOL? yes/no`, {
+        await bot.sendMessage(msg.chat.id, `Снимаем на голосование 3 SOL?\nFeepayer -> identity.\nYes/No`, {
           reply_markup: {
               inline_keyboard: [
-                  [{text: 'Да', callback_data: 'wd_yes'}, {text: 'Нет', callback_data: "closeMenu" }]
+                  [{text: 'Yes', callback_data: 'wd_for_vote'}, {text: 'No', callback_data: "closeMenu" }]
               ]
           },
           reply_to_message_id: msg.message_id
-        });  
+        });
+      } else if (msg.text == "/withdraw_vo_to") {
+        await bot.sendMessage(msg.chat.id, `Снимем SOL c vote account?\nFeepayer -> identity.\nYes/No`, {
+          reply_markup: {
+              inline_keyboard: [
+                  [{text: 'Yes', callback_data: 'wd_to'}, {text: 'No', callback_data: "closeMenu" }]
+              ]
+          },
+          reply_to_message_id: msg.message_id
+        });
+      } else if (msg.text == "/withdraw_id_to") {
+        await bot.sendMessage(msg.chat.id, `Отправить SOL c identity?\nFeepayer -> identity.\nYes/No`, {
+          reply_markup: {
+              inline_keyboard: [
+                  [{text: 'Yes', callback_data: 'id_to'}, {text: 'No', callback_data: "closeMenu" }]
+              ]
+          },
+          reply_to_message_id: msg.message_id
+        });
       } else if (msg.text == "/balance") {
         sendmsg = await balanceinfo(
-          process.env.pubkey_main,
-          process.env.pubkey_vote_main,
-          process.env.RPC_MAIN
-        );
+          current_params
+          );
         bot.sendMessage(msg.chat.id, sendmsg, { parse_mode: "HTML" });
       } else if (msg.text == "/stakes") {
         sendmsg = await stakes (
-          process.env.pubkey_main,
-          process.env.pubkey_vote_main,
-          process.env.RPC_MAIN
-        );
+          current_params
+          );
         bot.sendMessage(msg.chat.id, sendmsg, { parse_mode: "HTML" });
       } else if (msg.text == "/time_main") {
         sendmsg = await nodeinfo(
-          process.env.pubkey_main,
-          process.env.pubkey_vote_main,
-          process.env.RPC_MAIN
+          current_params
         );
         bot.sendMessage(msg.chat.id, sendmsg, { parse_mode: "HTML" });
       } //END TIME
       else if (msg.text == "/time_test") {
         sendmsg = await nodeinfo(
-          process.env.pubkey_test,
-          process.env.pubkey_vote_test,
-          process.env.RPC_TEST
+          clusterParams.test
         );
         bot.sendMessage(msg.chat.id, sendmsg, { parse_mode: "HTML" });
       } //END TIME
       else if (msg.text == "/rewards") {
         await rewardinfo(
-          process.env.pubkey_main,
-          process.env.pubkey_vote_main,
-          process.env.RPC_MAIN,
+          current_params,
           function (sendmsg){
             bot.sendMessage(msg.chat.id, sendmsg, { parse_mode: "HTML" });
           }
@@ -458,25 +557,91 @@ bot.on("text", async (msg) => {
   }
 });
 
-
+//Обрадотка колбэков бота
 bot.on('callback_query', async ctx => {
   try {
     switch(ctx.data) {
       case "closeMenu":
-          await bot.deleteMessage(ctx.message.chat.id, ctx.message.message_id);
-          await bot.deleteMessage(ctx.message.reply_to_message.chat.id, ctx.message.reply_to_message.message_id);
-          break;
+        await bot.deleteMessage(ctx.message.chat.id, ctx.message.message_id);
+        await bot.deleteMessage(ctx.message.reply_to_message.chat.id, ctx.message.reply_to_message.message_id);
+        break;
 
-      case "wd_yes":
+      case "wd_for_vote":
         await bot.deleteMessage(ctx.message.chat.id, ctx.message.message_id);
         await bot.deleteMessage(ctx.message.reply_to_message.chat.id, ctx.message.reply_to_message.message_id);
         sendmsg = await WithdrawFromVote(
-          process.env.prkey_ident_main,
-          process.env.pubkey_vote_main,
-          process.env.prkey_authoriz_main,
-          process.env.RPC_MAIN);
+          withdraw_params,
+          null,
+          3
+          );
         await bot.sendMessage(ctx.message.chat.id, sendmsg, { parse_mode: "HTML" });
       break;
+
+      case "wd_to":
+        await bot.deleteMessage(ctx.message.chat.id, ctx.message.message_id);
+        await bot.deleteMessage(ctx.message.reply_to_message.chat.id, ctx.message.reply_to_message.message_id);
+        bot.sendMessage(ctx.message.chat.id, '<code>Введите адрес принимающего кошелька:("stop" for exit)</code>', { parse_mode: "HTML" });
+        bot.once("text", async (addr) => {
+          if (addr.text == "stop") {
+            bot.sendMessage(addr.chat.id, 'Transaction stoped.', { parse_mode: "HTML" });
+          } else {
+            const receiver21 = addr.text.replace(/[^a-zA-Z0-9]/g, '');
+            if (await checkkey(receiver21)) {
+              bot.sendMessage(addr.chat.id, '<code>Введите сумму для отправки SOL:("stop" for exit)</code>', { parse_mode: "HTML" });
+              bot.once("text", async (amount_sol) => {
+                let sol = parseFloat(amount_sol.text.replace(/[^\d.]/g, ''));
+                if (amount_sol.text == "stop") {
+                  bot.sendMessage(amount_sol.chat.id, 'Transaction stoped.', { parse_mode: "HTML" });
+                } else if (isNaN(sol)) {
+                  bot.sendMessage(amount_sol.chat.id, `<code>🔴 Amount "${amount_sol.text}" is not correct.</code>`, { parse_mode: "HTML" });
+                } else {
+                  sendmsg = await WithdrawFromVote(
+                    withdraw_params,
+                    receiver21,
+                    sol
+                  );
+                  await bot.sendMessage(amount_sol.chat.id, sendmsg, { parse_mode: "HTML" });
+                  }
+                });
+              } else {
+                bot.sendMessage(addr.chat.id, `<code>🔴 Wallet ${receiver21} is not vailed.</code>`, { parse_mode: "HTML" });
+              }
+          }
+        });
+        break;
+
+        case "id_to":
+          await bot.deleteMessage(ctx.message.chat.id, ctx.message.message_id);
+          await bot.deleteMessage(ctx.message.reply_to_message.chat.id, ctx.message.reply_to_message.message_id);
+          bot.sendMessage(ctx.message.chat.id, '<code>Введите адрес принимающего кошелька:("stop" for exit)</code>', { parse_mode: "HTML" });
+          bot.once("text", async (addr) => {
+            if (addr.text == "stop") {
+              bot.sendMessage(addr.chat.id, 'Transaction stoped.', { parse_mode: "HTML" });
+            } else {
+              const receiver31 = addr.text.replace(/[^a-zA-Z0-9]/g, '');
+              if (await checkkey(receiver31)) {
+                bot.sendMessage(addr.chat.id, '<code>Введите сумму для отправки SOL:("stop" for exit)</code>', { parse_mode: "HTML" });
+                bot.once("text", async (amount_sol) => {
+                  let sol = parseFloat(amount_sol.text.replace(/[^\d.]/g, ''));
+                  if (amount_sol.text == "stop") {
+                    bot.sendMessage(amount_sol.chat.id, 'Transaction stoped.', { parse_mode: "HTML" });
+                  } else if (isNaN(sol)) {
+                    bot.sendMessage(amount_sol.chat.id, `<code>🔴 Amount "${amount_sol.text}" is not correct.</code>`, { parse_mode: "HTML" });
+                  } else {
+                    sendmsg = await WithdrawFromIdentity(
+                      send_params,
+                      receiver31,
+                      sol
+                    );
+                    await bot.sendMessage(amount_sol.chat.id, sendmsg, { parse_mode: "HTML" });
+                    }
+                  });
+                } else {
+                  bot.sendMessage(addr.chat.id, `<code>🔴 Wallet ${receiver31} is not vailed.</code>`, { parse_mode: "HTML" });
+                }
+            }
+          });
+          break;
       }
   }
   catch(error) {
@@ -484,5 +649,4 @@ bot.on('callback_query', async ctx => {
   }
 })
 
-
-bot.on("polling_error", (err) => console.log(err));
+bot.on("polling_error", (err) => console.log(err.code));
