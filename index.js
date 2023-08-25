@@ -468,18 +468,18 @@ bot.on("text", async (msg) => {
   let sendmsg;
   if (msg.from.id == myid) {
     try {
-      if (msg.text.startsWith("/start")) {
-        sendmsg = `<code>Hi ${msg.from.first_name} your id: ${msg.from.id}, username: ${msg.from.username}\nCurrent cluster:${process.env.cluster}</code>`;
+      if (msg.text == "/start" || msg.text == "Старт") {
+        sendmsg = `<code>Hi ${msg.from.first_name} your id: ${msg.from.id}, username: ${msg.from.username}\nCurrent cluster:${process.env.cluster}.\nEnter to menu</code> /menu`;
         bot.sendMessage(msg.chat.id, sendmsg, { parse_mode: "HTML" });
       } else if(msg.text == '/menu') {
         await bot.sendMessage(msg.chat.id, 'Menu is open -->', {
             reply_markup: {
                 keyboard: [
-                    ['/start', '/balance'],
-                    ['/withdraw'],
-                    ['/withdraw_id_to', '/withdraw_vo_to'],
-                    ['/stakes', '/rewards'],
-                    ['/time_test', '/time_main'],
+                    ['Старт', 'Баланс'],
+                    ['Снять на голосование 3 sol'],
+                    ['Отправить с identity', 'Снять из vote на identity'],
+                    ['Стэйки', 'Реварды'],
+                    ['Валидатор тест', 'Валидатор майн'],
                     ['❌ Закрыть меню']
                 ],
                 resize_keyboard: true,
@@ -492,7 +492,7 @@ bot.on("text", async (msg) => {
                   remove_keyboard: true
               }
         });
-      } else if (msg.text == "/withdraw") {
+      } else if (msg.text == "/withdraw" || msg.text == "Снять на голосование 3 sol") {
         await bot.sendMessage(msg.chat.id, `Снимаем на голосование 3 SOL?\nFeepayer -> identity.\nYes/No`, {
           reply_markup: {
               inline_keyboard: [
@@ -501,7 +501,7 @@ bot.on("text", async (msg) => {
           },
           reply_to_message_id: msg.message_id
         });
-      } else if (msg.text == "/withdraw_vo_to") {
+      } else if (msg.text == "/withdraw_vo_to" || msg.text == "Снять из vote на identity") {
         await bot.sendMessage(msg.chat.id, `Снимем SOL c vote account?\nFeepayer -> identity.\nYes/No`, {
           reply_markup: {
               inline_keyboard: [
@@ -510,7 +510,7 @@ bot.on("text", async (msg) => {
           },
           reply_to_message_id: msg.message_id
         });
-      } else if (msg.text == "/withdraw_id_to") {
+      } else if (msg.text == "/withdraw_id_to" || msg.text == "Отправить с identity") {
         await bot.sendMessage(msg.chat.id, `Отправить SOL c identity?\nFeepayer -> identity.\nYes/No`, {
           reply_markup: {
               inline_keyboard: [
@@ -519,29 +519,29 @@ bot.on("text", async (msg) => {
           },
           reply_to_message_id: msg.message_id
         });
-      } else if (msg.text == "/balance") {
+      } else if (msg.text == "/balance" || msg.text == "Баланс") {
         sendmsg = await balanceinfo(
           current_params
           );
         bot.sendMessage(msg.chat.id, sendmsg, { parse_mode: "HTML" });
-      } else if (msg.text == "/stakes") {
+      } else if (msg.text == "/stakes" || msg.text == "Стэйки") {
         sendmsg = await stakes (
           current_params
           );
         bot.sendMessage(msg.chat.id, sendmsg, { parse_mode: "HTML" });
-      } else if (msg.text == "/time_main") {
+      } else if (msg.text == "/time_main" || msg.text == "Валидатор майн") {
         sendmsg = await nodeinfo(
           current_params
         );
         bot.sendMessage(msg.chat.id, sendmsg, { parse_mode: "HTML" });
       } //END TIME
-      else if (msg.text == "/time_test") {
+      else if (msg.text == "/time_test" || msg.text == "Валидатор тест") {
         sendmsg = await nodeinfo(
           clusterParams.test
         );
         bot.sendMessage(msg.chat.id, sendmsg, { parse_mode: "HTML" });
       } //END TIME
-      else if (msg.text == "/rewards") {
+      else if (msg.text == "/rewards" || msg.text == "Реварды") {
         await rewardinfo(
           current_params,
           function (sendmsg){
