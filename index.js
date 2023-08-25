@@ -91,24 +91,30 @@ async function checkkey(key1){
 async function WithdrawFromIdentity([key_prkey1, RPC_URL], receiver3_1, sol){
   const connection = new solanaWeb3.Connection(RPC_URL);
 
-  var stringToArray3 = key_prkey1.replace('[', '').replace(']', '').split(',');
-  let prkey_key = Uint8Array.from(stringToArray3);
+  const stringToArray3 = key_prkey1.replace('[', '').replace(']', '').split(',');
+  const prkey_key = Uint8Array.from(stringToArray3);
 
-  const feepayer = Keypair.fromSecretKey(prkey_key);
+  const sender = Keypair.fromSecretKey(prkey_key);
   const receiver3 = new PublicKey(receiver3_1);
-  let amount = sol*LAMPORTS_PER_SOL;
-
+  const senderbalance = await connection.getBalance(sender.publicKey);
+  const senderbalanceLimit = 2;
+  const amoLimit = senderbalance - senderbalanceLimit*LAMPORTS_PER_SOL;
+  const amount = sol*LAMPORTS_PER_SOL;
+  if ( amount > amoLimit) {
+    return `<code>🔴 Withdraw will leave identity with insufficient funds. ${amoLimit} SOL need for paying voting.\nYou can send max: ${amoLimit/LAMPORTS_PER_SOL} SOL.\nTransaction stoped.</code>`;
+  } else {
   const transferTransaction = new Transaction().add(
     solanaWeb3.SystemProgram.transfer({
-      fromPubkey: feepayer.publicKey,
+      fromPubkey: sender.publicKey,
       toPubkey: receiver3,
       lamports: amount,
     })
   );
   
-  const signature = await sendAndConfirmTransaction(connection, transferTransaction, [feepayer]);
+  const signature = await sendAndConfirmTransaction(connection, transferTransaction, [sender]);
 
   return `<code>🟢 You sent ${sol} SOL to ${receiver3_1}.\n\nTransaction signature: ${signature}</code>`;
+  }
 }
 
 //Функция выполение транзакции по снятию с vote account
@@ -116,15 +122,15 @@ async function WithdrawFromVote([key_prkey1, vote_key1, prkey_authoriz, RPC_URL]
   const connection = new solanaWeb3.Connection(RPC_URL);
   const vote_key = new PublicKey(vote_key1);
 
-  var stringToArray2 = prkey_authoriz.replace('[', '').replace(']', '').split(',');
-  let prkey_auth = Uint8Array.from(stringToArray2);
-  var stringToArray3 = key_prkey1.replace('[', '').replace(']', '').split(',');
-  let prkey_key = Uint8Array.from(stringToArray3);  
+  const stringToArray2 = prkey_authoriz.replace('[', '').replace(']', '').split(',');
+  const prkey_auth = Uint8Array.from(stringToArray2);
+  const stringToArray3 = key_prkey1.replace('[', '').replace(']', '').split(',');
+  const prkey_key = Uint8Array.from(stringToArray3);  
   const auth = Keypair.fromSecretKey(prkey_auth);
   const receiver = Keypair.fromSecretKey(prkey_key);
   const votebalance = await connection.getBalance(vote_key);
   const votebalanceLimit = 2; 
-  let amount = sol*LAMPORTS_PER_SOL;
+  const amount = sol*LAMPORTS_PER_SOL;
   
   if (receiver2_1 == null) {
     params = {
