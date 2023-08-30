@@ -240,13 +240,25 @@ async function stakes([key, vote_key, RPC_URL]) {
       arrmes.push(out);
     }
     let arrmes2 =[];
+    let stake1;
+    let activ=0;
+    let deactiv=0;
     arrmes2 = sortArrayOfObjects(arrmes, 1);
     for (let g=0; g < accounts.length; g++) {
       st1 = arrmes2[g][0].slice(0,3);
       st2 = arrmes2[g][0].slice(-4);
-      mes += `${g+1}. ${st1}..${st2}  ${arrmes2[g][1]} - ${arrmes2[g][2]}  ${arrmes2[g][3]}\n`;
+      if (arrmes2[g][2] !== '∞') {
+        stake1 = `${arrmes2[g][3]}🔴`;
+        deactiv += arrmes2[g][3];
+      } else if (arrmes2[g][1] == epochInfo.epoch && arrmes2[g][2] == '∞') {
+        stake1 = `${arrmes2[g][3]}🟢`;
+        activ += arrmes2[g][3];
+      } else {
+        stake1 = arrmes2[g][3];
+      }
+      mes += `${g+1}. ${st1}..${st2}  ${arrmes2[g][1]} - ${arrmes2[g][2]}  ${stake1}\n`;
     }
-    sendmsg = `<code>CurrentEpoch: ${epochInfo.epoch}\n    Staker  StartEp EndEp  Stake\n${mes}\nAll: ${Math.round(sum, 2)} sol</code>`;
+    sendmsg = `<code>CurrentEpoch: ${epochInfo.epoch}\n    Staker  StartEp EndEp  Stake\n${mes}\nActiv: ${activ} / Deactiv: ${deactiv}\n\nTotal: ${Math.round(sum, 2)} sol</code>`;
     return sendmsg;
   }
 }
