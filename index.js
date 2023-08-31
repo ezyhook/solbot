@@ -18,6 +18,7 @@ const commands = [
   { command: "balance", description: "Show balance" },
   { command: "rewards", description: "Show rewards for 10 epoch" },
   { command: "stakes", description: "Show stakes" },
+  { command: "stakes_va", description: "Show another stakes" },
   { command: "time_main", description: "Mainnet block production" },
   { command: "time_test", description: "Testnet block production" },
 ];
@@ -56,6 +57,19 @@ Math.round = function (number, decimals /* optional, default 0 */) {
   let multiplier = Math.pow(10, decimals);
   return _round(number * multiplier) / multiplier;
 };
+//Функция разделения сообщения
+function chunkString(str, size, delimiter='\n' ) {
+  let result = [];
+  // result.push(str.slice(4076, 8135));
+  let t = 0;
+  let str_index;
+  for (let i = 0; i < str.length/size; i++) {
+    str_index = str.slice(t, t+size).lastIndexOf(delimiter);
+    result.push(str.slice(t, t+str_index));
+    t += str_index + delimiter.length;
+  }
+  return result;
+}
 //Функция инфо по ноде
 async function getNode(identityPublicKey, RPC_URL) {
   const connection = new solanaWeb3.Connection(RPC_URL);
@@ -258,7 +272,7 @@ async function stakes([key, vote_key, RPC_URL]) {
       }
       mes += `${g+1}. ${st1}..${st2}  ${arrmes2[g][1]} - ${arrmes2[g][2]}  ${stake1}\n`;
     }
-    sendmsg = `<code>CurrentEpoch: ${epochInfo.epoch}\n    Staker  StartEp EndEp  Stake\n${mes}\nActiv: ${activ} / Deactiv: ${deactiv}\n\nTotal: ${Math.round(sum, 2)} sol</code>`;
+    sendmsg = `CurrentEpoch: ${epochInfo.epoch}\n    Staker  StartEp EndEp  Stake\n${mes}\nActiv: ${activ} / Deactiv: ${deactiv}\n\nTotal: ${Math.round(sum, 2)} sol\n`;
     return sendmsg;
   }
 }
@@ -272,11 +286,11 @@ async function balanceinfo([key, vote_key, RPC_URL]) {
   const solBalance1 = Math.round(balance1 / LAMPORTS_PER_SOL, 4);
   const solBalance2 = Math.round(balance2 / LAMPORTS_PER_SOL, 4);
   const { custake } = await getVoteStatus(key, RPC_URL);
-  let sendmsg = `<code>Identity balance: ${solBalance1} sol\nVote account balance: ${solBalance2} sol\nActivatedStake: ${Math.round(
+  /*let sendmsg = `<code>Identity balance: ${solBalance1} sol\nVote account balance: ${solBalance2} sol\nActivatedStake: ${Math.round(
     custake / LAMPORTS_PER_SOL,
     4
-  )} sol</code>`;
-  return sendmsg;
+  )} sol</code>`;*/
+  return [ solBalance1, solBalance2, custake ];
 }
 //Функция по определению наград полученных валидатором на vote account
 async function rewardinfo([key, vote_key, RPC_URL], callBackFn) {
@@ -459,12 +473,12 @@ async function nodeinfo([key, vote_key, RPC_URL]) {
     let t_end = new Date(secs_slot_end).toLocaleString("ru-RU", {
       timeZone: timeZ,
     });
-    sendmsg = `<code>Status node: ${status} ${await getNode(key, RPC_URL)}\n\nBlock production:\nAll:${all} Done:${Done} Will:${will_done} Skipped:${skipped}\n
+    sendmsg = `Status node: ${status} ${await getNode(key, RPC_URL)}\n\nBlock production:\nAll:${all} Done:${Done} Will:${will_done} Skipped:${skipped}\n
 Next block:
 ${normalDate} - ${echo[0]}d ${echo[1]}h ${echo[2]}m ${echo[3]}s
 ${last}
 End epoch:
-${t_end} - ${echoe[0]}d ${echoe[1]}h ${echoe[2]}m ${echoe[3]}s</code>`;
+${t_end} - ${echoe[0]}d ${echoe[1]}h ${echoe[2]}m ${echoe[3]}s\n`;
     return sendmsg;
   } else {
     let echo = [];
@@ -474,9 +488,9 @@ ${t_end} - ${echoe[0]}d ${echoe[1]}h ${echoe[2]}m ${echoe[3]}s</code>`;
     let t_end = new Date(secs_slot).toLocaleString("ru-RU", {
       timeZone: timeZ,
     });
-   sendmsg = `<code>Status node: ${status} ${await getNode(key, RPC_URL)}\n\nBlock production:\nAll:${all} Done:${Done} Will:${will_done} Skipped:${skipped}\n
+   sendmsg = `Status node: ${status} ${await getNode(key, RPC_URL)}\n\nBlock production:\nAll:${all} Done:${Done} Will:${will_done} Skipped:${skipped}\n
 All slots Done. End of the epoch:
-${t_end} - ${echo[0]}d ${echo[1]}h ${echo[2]}m ${echo[3]}s</code>`;
+${t_end} - ${echo[0]}d ${echo[1]}h ${echo[2]}m ${echo[3]}s\n`;
     return sendmsg;
   }
 } //END NODEINFO
@@ -489,7 +503,7 @@ bot.on("text", async (msg) => {
       if (msg.text == "/start" || msg.text == "Старт") {
         sendmsg = `<code>Hi ${msg.from.first_name} your id: ${msg.from.id}, username: ${msg.from.username}\nCurrent cluster:${process.env.cluster}.\nEnter to menu</code> /menu`;
         bot.sendMessage(msg.chat.id, sendmsg, { parse_mode: "HTML" });
-      } else if(msg.text == '/menu') {
+      } else if(msg.text == '/menu' || msg.text == "Меню") {
         await bot.sendMessage(msg.chat.id, 'Menu is open -->', {
             reply_markup: {
                 keyboard: [
@@ -529,7 +543,7 @@ bot.on("text", async (msg) => {
           reply_to_message_id: msg.message_id
         });
       } else if (msg.text == "/withdraw_id_to" || msg.text == "Отправить с identity") {
-        await bot.sendMessage(msg.chat.id, `Отправить SOL c identity?\nFeepayer -> identity.\nYes/No`, {
+        await bot.sendMessage(msg.chat.id, `Отправить SOL c identity?\nFeepayer -> identity.\nYes / No`, {
           reply_markup: {
               inline_keyboard: [
                   [{text: 'Yes', callback_data: 'id_to'}, {text: 'No', callback_data: "closeMenu" }]
@@ -538,26 +552,73 @@ bot.on("text", async (msg) => {
           reply_to_message_id: msg.message_id
         });
       } else if (msg.text == "/balance" || msg.text == "Баланс") {
-        sendmsg = await balanceinfo(
+        balances = await balanceinfo(
           current_params
           );
-        bot.sendMessage(msg.chat.id, sendmsg, { parse_mode: "HTML" });
+        if (balances[0] < 3) {
+          sendmsg = `<code>Пополни баланс identity 🔴\nIdentity balance: ${balances[0]} sol\nVote account balance: ${balances[1]} sol\nActivatedStake: ${Math.round(
+            balances[2] / LAMPORTS_PER_SOL,
+            4
+          )} sol</code>`
+          bot.sendMessage(msg.chat.id, sendmsg, { parse_mode: "HTML", reply_markup: {
+            inline_keyboard: [
+                [{text: 'Отправить 3 SOL на identity', callback_data: 'wd_for_vote'}, {text: 'Нет', callback_data: "closeMenu" }]
+            ]
+          },
+          reply_to_message_id: msg.message_id
+          });
+        } else {
+          sendmsg = `<code>Identity balance: ${balances[0]} sol\nVote account balance: ${balances[1]} sol\nActivatedStake: ${Math.round(
+            balances[2] / LAMPORTS_PER_SOL,
+            4
+          )} sol</code>`
+          bot.sendMessage(msg.chat.id, sendmsg, { parse_mode: "HTML" });
+        }
       } else if (msg.text == "/stakes" || msg.text == "Стэйки") {
-        sendmsg = await stakes (
+        sendmsg1 = await stakes (
           current_params
           );
-        bot.sendMessage(msg.chat.id, sendmsg, { parse_mode: "HTML" });
+        sendmsg = chunkString (sendmsg1, 4080);
+        for (let i=0; i < sendmsg.length; i++) {
+          await bot.sendMessage(msg.chat.id, `<code>${sendmsg[i]}</code>`, { parse_mode: "HTML" });
+        }
+      } else if (msg.text == "/stakes_va") {
+        bot.sendMessage(msg.chat.id, '<code>Введите pubkey vote account:("stop" for exit)</code>', { parse_mode: "HTML" });
+        bot.once("text", async (addr_va) => {
+          if (addr_va.text == "stop") {
+            bot.sendMessage(addr_va.chat.id, 'Stoped.', { parse_mode: "HTML" });
+          } else {
+            const va = addr_va.text.replace(/[^a-zA-Z0-9]/g, '');
+            if (await checkkey(va)) {
+              let sendmsg1 = await stakes (
+                ['none', va, process.env.RPC_MAIN]
+                );
+              sendmsg = chunkString (sendmsg1, 4080);
+              for (let i=0; i < sendmsg.length; i++) {
+                await bot.sendMessage(addr_va.chat.id, `<code>${sendmsg[i]}</code>`, { parse_mode: "HTML" });
+              }
+            } else {
+              bot.sendMessage(addr_va.chat.id, `<code>🔴 Voit account ${va} is not vailed.</code>`, { parse_mode: "HTML" });
+            }
+          }
+        })
       } else if (msg.text == "/time_main" || msg.text == "Валидатор майн") {
-        sendmsg = await nodeinfo(
+        sendmsg1 = await nodeinfo(
           current_params
         );
-        bot.sendMessage(msg.chat.id, sendmsg, { parse_mode: "HTML" });
+        sendmsg = chunkString (sendmsg1, 4080);
+        for (let i=0; i < sendmsg.length; i++) {
+          await bot.sendMessage(msg.chat.id, `<code>${sendmsg[i]}</code>`, { parse_mode: "HTML" });
+        }
       } //END TIME
       else if (msg.text == "/time_test" || msg.text == "Валидатор тест") {
-        sendmsg = await nodeinfo(
+        sendmsg1 = await nodeinfo(
           clusterParams.test
         );
-        bot.sendMessage(msg.chat.id, sendmsg, { parse_mode: "HTML" });
+        sendmsg = chunkString (sendmsg1, 4080);
+        for (let i=0; i < sendmsg.length; i++) {
+          await bot.sendMessage(msg.chat.id, `<code>${sendmsg[i]}</code>`, { parse_mode: "HTML" });
+        }
       } //END TIME
       else if (msg.text == "/rewards" || msg.text == "Реварды") {
         await rewardinfo(
