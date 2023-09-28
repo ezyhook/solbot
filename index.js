@@ -1,8 +1,13 @@
 const solanaWeb3 = require("@solana/web3.js");
-const { PublicKey, LAMPORTS_PER_SOL, Transaction, sendAndConfirmTransaction, Keypair} = require("@solana/web3.js");
+const { PublicKey, LAMPORTS_PER_SOL, Transaction, sendAndConfirmTransaction, Keypair } = require("@solana/web3.js");
 const TelegramBot = require("node-telegram-bot-api");
 require("dotenv").config();
 const Datastore = require('nedb');
+const cryptojs = require("crypto-js")
+const SHA256 = require("crypto-js/sha256");
+const { Cron } = require("croner");
+
+const timeZ = "Europe/Moscow";
 const dbfile='cookie.json'
 let db = new Datastore({filename : dbfile, autoload: true, timestampData: true});
 const bot = new TelegramBot(process.env.API_KEY_BOT, {
@@ -13,6 +18,7 @@ const commands = [
   { command: "start", description: "Start bot" },
   { command: "menu", description: "Bot menu" },
   { command: "withdraw", description: "Снять на голосование 3 SOL" },
+  { command: "autowithdraw", description: "Autowithdraw 0.771 sol." },
   { command: "withdraw_vo_to", description: "Отправить SOL с vote" },
   { command: "withdraw_id_to", description: "Отправить SOL с identity" },
   { command: "balance", description: "Show balance" },
@@ -22,40 +28,14 @@ const commands = [
   { command: "time_main", description: "Mainnet block production" },
   { command: "time_test", description: "Testnet block production" },
 ];
-let myid = process.env.userid;
+
 bot.setMyCommands(commands);
 
-/* Основные параметры */
-const clusterParams = {
-  test: [process.env.pubkey_test, process.env.pubkey_vote_test, process.env.RPC_TEST],
-  main: [process.env.pubkey_main, process.env.pubkey_vote_main, process.env.RPC_MAIN],
-  withdraw_test: [process.env.prkey_ident_test, process.env.pubkey_vote_test, process.env.prkey_authoriz_test, process.env.RPC_TEST],
-  withdraw_main: [process.env.prkey_ident_main, process.env.pubkey_vote_main, process.env.prkey_authoriz_main, process.env.RPC_MAIN],
-  send_test: [process.env.prkey_ident_test, process.env.RPC_TEST],
-  send_main: [process.env.prkey_ident_main, process.env.RPC_MAIN]
-}
-
-/*------Определение параметров ---------------*/
-let current_params, withdraw_params;
-if (process.env.cluster == 'main') {
-  current_params = clusterParams.main;
-  withdraw_params = clusterParams.withdraw_main;
-  send_params = clusterParams.send_main;
-} else {
-  current_params = clusterParams.test;
-  withdraw_params = clusterParams.withdraw_test;
-  send_params = clusterParams.send_test;
-}
-/*--------------------------------------------*/
-
 //Функция округления
-let _round = Math.round;
-Math.round = function (number, decimals /* optional, default 0 */) {
-  if (arguments.length == 1) {
-    return _round(number);
-  }
-  let multiplier = Math.pow(10, decimals);
-  return _round(number * multiplier) / multiplier;
+Math.round1 = function (num, decimalPlaces = 0) {
+  var p = Math.pow(10, decimalPlaces);
+    var n = (num * p) * (1 + Number.EPSILON);
+    return Math.round(n) / p;
 };
 //Функция разделения сообщения
 function chunkString(str, size, delimiter='\n' ) {
@@ -180,7 +160,8 @@ async function WithdrawFromVote([key_prkey1, vote_key1, prkey_authoriz, RPC_URL]
   catch(error) {
     return `<code>🔴 Withdraw will leave vote account with insufficient funds. ${votebalanceLimit} SOL need for paying rent.\nYou can withdraw max: ${(votebalance - votebalanceLimit*LAMPORTS_PER_SOL)/LAMPORTS_PER_SOL} SOL.\nTransaction stoped.</code>`;
   }
-}       
+}
+
 //Функция определения статуса валидатора
 async function getVoteStatus(identityPublicKey, RPC_URL) {
   const connection = new solanaWeb3.Connection(RPC_URL);
@@ -216,6 +197,7 @@ function sortArrayOfObjects(arrayToSort, key) {
   return arrayToSort.sort(compareObjects);
 }
 //Функция определения делегированых на валидатора стэйков
+let arrmes2 =[];
 async function stakes([key, vote_key, RPC_URL]) {
   const connection = new solanaWeb3.Connection(RPC_URL);
   const epochInfo = await connection.getEpochInfo();
@@ -248,12 +230,12 @@ async function stakes([key, vote_key, RPC_URL]) {
       d_epoch = accounts[i]["account"]["data"]["parsed"]["info"]["stake"]["delegation"]["deactivationEpoch"];
       if (d_epoch == 18446744073709551615) {d_epoch = '∞';}
       stake = accounts[i]["account"]["data"]["parsed"]["info"]["stake"]["delegation"]["stake"] / LAMPORTS_PER_SOL;
-      echo_stake = Math.round(stake, 4);
+      echo_stake = Math.round1(stake, 4);
       sum += stake;
       out.push(staker, a_epoch, d_epoch, echo_stake);
       arrmes.push(out);
     }
-    let arrmes2 =[];
+    
     let stake1;
     let activ=0;
     let deactiv=0;
@@ -262,17 +244,17 @@ async function stakes([key, vote_key, RPC_URL]) {
       st1 = arrmes2[g][0].slice(0,3);
       st2 = arrmes2[g][0].slice(-4);
       if (arrmes2[g][2] !== '∞') {
-        stake1 = `${arrmes2[g][3]}🔴`;
+        stake1 = `-${arrmes2[g][3].toFixed(4)}🔴`;
         deactiv += arrmes2[g][3];
       } else if (arrmes2[g][1] == epochInfo.epoch && arrmes2[g][2] == '∞') {
-        stake1 = `${arrmes2[g][3]}🟢`;
+        stake1 = `+${arrmes2[g][3].toFixed(4)}🟢`;
         activ += arrmes2[g][3];
       } else {
-        stake1 = arrmes2[g][3];
+        stake1 = arrmes2[g][3].toFixed(4);
       }
       mes += `${g+1}. ${st1}..${st2}  ${arrmes2[g][1]} - ${arrmes2[g][2]}  ${stake1}\n`;
     }
-    sendmsg = `CurrentEpoch: ${epochInfo.epoch}\n    Staker  StartEp EndEp  Stake\n${mes}\nActiv: ${activ} / Deactiv: ${deactiv}\n\nTotal: ${Math.round(sum, 2)} sol\n`;
+    sendmsg = `CurrentEpoch: ${epochInfo.epoch}\n    Staker  StartEp EndEp  Stake\n${mes}\nActiv: +${Math.round1(activ, 2).toFixed(2)} / Deactiv: -${Math.round1(deactiv, 2).toFixed(2)}\n\nTotal: ${Math.round1(sum, 2).toFixed(2)} sol\n`;
     return sendmsg;
   }
 }
@@ -283,13 +265,9 @@ async function balanceinfo([key, vote_key, RPC_URL]) {
   const walletKey2 = new solanaWeb3.PublicKey(vote_key);
   const balance1 = await connection.getBalance(walletKey1);
   const balance2 = await connection.getBalance(walletKey2);
-  const solBalance1 = Math.round(balance1 / LAMPORTS_PER_SOL, 4);
-  const solBalance2 = Math.round(balance2 / LAMPORTS_PER_SOL, 4);
+  const solBalance1 = Math.round1(balance1 / LAMPORTS_PER_SOL, 4);
+  const solBalance2 = Math.round1(balance2 / LAMPORTS_PER_SOL, 4);
   const { custake } = await getVoteStatus(key, RPC_URL);
-  /*let sendmsg = `<code>Identity balance: ${solBalance1} sol\nVote account balance: ${solBalance2} sol\nActivatedStake: ${Math.round(
-    custake / LAMPORTS_PER_SOL,
-    4
-  )} sol</code>`;*/
   return [ solBalance1, solBalance2, custake ];
 }
 //Функция по определению наград полученных валидатором на vote account
@@ -303,10 +281,10 @@ async function rewardinfo([key, vote_key, RPC_URL], callBackFn) {
     let sum_rew = 0;
     let sendmsg = `<code>${stat}\nEpoch Comm   Rewards Balance\n`;
     for (let g = 0; g < 10; g++) {
-      sendmsg += `${values[g][0]}     ${values[g][1]}      ${Math.round(values[g][2] / LAMPORTS_PER_SOL, 2)}   ${Math.round(values[g][3] / LAMPORTS_PER_SOL, 2)}\n`;
+      sendmsg += `${values[g][0]}     ${values[g][1]}      ${Math.round1(values[g][2] / LAMPORTS_PER_SOL, 2)}   ${Math.round1(values[g][3] / LAMPORTS_PER_SOL, 2)}\n`;
       sum_rew += values[g][2] / LAMPORTS_PER_SOL;
     }
-    sendmsg += `\n Sum rewards:  ${Math.round(sum_rew, 2)} sol</code>`;
+    sendmsg += `\n Sum rewards:  ${Math.round1(sum_rew, 2).toFixed(2)} sol</code>`;
     return sendmsg;
   }
   function getrewards() {
@@ -365,7 +343,6 @@ async function rewardinfo([key, vote_key, RPC_URL], callBackFn) {
       callBackFn(showrew(doc[0]['data'],'Cookie'));
     }
     });
-
 }
 //Функция для определению производительности ноды
 async function nodeinfo([key, vote_key, RPC_URL]) {
@@ -381,9 +358,7 @@ async function nodeinfo([key, vote_key, RPC_URL]) {
     out.push(second);
     return out;
   }
-
   const connection = new solanaWeb3.Connection(RPC_URL);
-  let timeZ = Intl.DateTimeFormat().resolvedOptions().timeZone;
   let params_t = 5;
   let data_time = await connection.getRecentPerformanceSamples(params_t);
   let time_t = 0;
@@ -398,7 +373,7 @@ async function nodeinfo([key, vote_key, RPC_URL]) {
   const production = await connection.getBlockProduction();
   const allt_d = LeaderSchedule[key];
   let sdelal_blokov_d;
-  if (production["value"]["byIdentity"][key] === undefined) {
+  if (typeof production["value"]["byIdentity"][key] === 'undefined') {
     sdelal_blokov_d = 0;
   } else {
     sdelal_blokov_d = production["value"]["byIdentity"][key][1];
@@ -408,7 +383,7 @@ async function nodeinfo([key, vote_key, RPC_URL]) {
   let end_slot_d = epochInfo.slotsInEpoch;
   let Done, will_done, skipped, skip, all, status;
   let next_slots = [];
-  if (allt_d == 0) {
+  if (typeof allt_d === "undefined") {
     Done = 0;
     will_done = 0;
     skipped = 0;
@@ -428,7 +403,7 @@ async function nodeinfo([key, vote_key, RPC_URL]) {
       skip = 0;
     } else {
       skipped = Done - sdelal_blokov_d;
-      skip = Math.round((skipped * 100) / Done, 2);
+      skip = Math.round1((skipped * 100) / Done, 2);
     }
   }
   const { status_voit } = await getVoteStatus(key, RPC_URL);
@@ -495,13 +470,48 @@ ${t_end} - ${echo[0]}d ${echo[1]}h ${echo[2]}m ${echo[3]}s\n`;
   }
 } //END NODEINFO
 
+  /* Основные параметры */
+  const clusterParams = {
+    test: [process.env.pubkey_test, process.env.pubkey_vote_test, process.env.RPC_TEST],
+    main: [process.env.pubkey_main, process.env.pubkey_vote_main, process.env.RPC_MAIN],
+    withdraw_test: [process.env.prkey_ident_test, process.env.pubkey_vote_test, process.env.prkey_authoriz_test, process.env.RPC_TEST],
+    withdraw_main: [process.env.prkey_ident_main, process.env.pubkey_vote_main, process.env.prkey_authoriz_main, process.env.RPC_MAIN],
+    send_test: [process.env.prkey_ident_test, process.env.RPC_TEST],
+    send_main: [process.env.prkey_ident_main, process.env.RPC_MAIN]
+  }
+
+  /*------Определение параметров ---------------*/
+  let current_params, withdraw_params;
+  if (process.env.cluster == 'main') {
+    current_params = clusterParams.main;
+    withdraw_params = clusterParams.withdraw_main;
+    send_params = clusterParams.send_main;
+  } else {
+    current_params = clusterParams.test;
+    withdraw_params = clusterParams.withdraw_test;
+    send_params = clusterParams.send_test;
+  }
+  /*--------------------------------------------*/
+
+
+
+// Автоснятие для голосования
+  var task = Cron('0 5 12 * * *', {timezone: timeZ, paused: true}, async () =>  {
+    sendmsg = await WithdrawFromVote(
+      withdraw_params,
+      null,
+      process.env.autowithdraw
+      );
+    await bot.sendMessage(myid, `Auto: ${sendmsg}`, { parse_mode: "HTML" });
+  });
+
 //Обработка текстовых сообщений ботом
 bot.on("text", async (msg) => {
-  let sendmsg;
+  let sendmsg, sendmsg1;
   if (msg.from.id == myid) {
     try {
       if (msg.text == "/start" || msg.text == "Старт") {
-        sendmsg = `<code>Hi ${msg.from.first_name} your id: ${msg.from.id}, username: ${msg.from.username}\nCurrent cluster:${process.env.cluster}.\nEnter to menu</code> /menu`;
+        sendmsg = `<code>Hi ${msg.from.first_name} your id: ${msg.from.id}, chat id ${msg.chat.id}, username: ${msg.from.username}\nCurrent cluster:${process.env.cluster}.\nEnter to menu</code> /menu`;
         bot.sendMessage(msg.chat.id, sendmsg, { parse_mode: "HTML" });
       } else if(msg.text == '/menu' || msg.text == "Меню") {
         await bot.sendMessage(msg.chat.id, 'Menu is open -->', {
@@ -533,6 +543,16 @@ bot.on("text", async (msg) => {
           },
           reply_to_message_id: msg.message_id
         });
+      } else if (msg.text == "/autowithdraw") {
+        let tasks = task.isRunning() ? "Activ 🟢" : "Deactiv 🔴";
+        await bot.sendMessage(msg.chat.id, `Autowithdraw ${process.env.autowithdraw} sol.\nStatus: ${tasks}\nNext withdraw: ${task.nextRuns(3)}`, {
+          reply_markup: {
+              inline_keyboard: [
+                  [{text: 'Запустить', callback_data: 'task_on'}, {text: 'Остановить', callback_data: "task_off" }]
+              ]
+          },
+          reply_to_message_id: msg.message_id
+        });
       } else if (msg.text == "/withdraw_vo_to" || msg.text == "Снять из vote на identity") {
         await bot.sendMessage(msg.chat.id, `Снимем SOL c vote account?\nFeepayer -> identity.\nYes/No`, {
           reply_markup: {
@@ -556,7 +576,7 @@ bot.on("text", async (msg) => {
           current_params
           );
         if (balances[0] < 3) {
-          sendmsg = `<code>Пополни баланс identity 🔴\nIdentity balance: ${balances[0]} sol\nVote account balance: ${balances[1]} sol\nActivatedStake: ${Math.round(
+          sendmsg = `<code>Пополни баланс identity 🔴\nIdentity balance: ${balances[0]} sol\nVote account balance: ${balances[1]} sol\nActivatedStake: ${Math.round1(
             balances[2] / LAMPORTS_PER_SOL,
             4
           )} sol</code>`
@@ -568,10 +588,10 @@ bot.on("text", async (msg) => {
           reply_to_message_id: msg.message_id
           });
         } else {
-          sendmsg = `<code>Identity balance: ${balances[0]} sol\nVote account balance: ${balances[1]} sol\nActivatedStake: ${Math.round(
+          sendmsg = `<code>Identity balance: ${balances[0]} sol\nVote account balance: ${balances[1]} sol\nActivatedStake: ${Math.round1(
             balances[2] / LAMPORTS_PER_SOL,
             4
-          )} sol</code>`
+          ).toFixed(4)} sol</code>`
           bot.sendMessage(msg.chat.id, sendmsg, { parse_mode: "HTML" });
         }
       } else if (msg.text == "/stakes" || msg.text == "Стэйки") {
@@ -580,7 +600,14 @@ bot.on("text", async (msg) => {
           );
         sendmsg = chunkString (sendmsg1, 4080);
         for (let i=0; i < sendmsg.length; i++) {
-          await bot.sendMessage(msg.chat.id, `<code>${sendmsg[i]}</code>`, { parse_mode: "HTML" });
+          await bot.sendMessage(msg.chat.id, `<code>${sendmsg[i]}</code>`, { parse_mode: "HTML",
+          reply_markup: {
+            inline_keyboard: [
+                [{text: 'Группировать по стэйкеру', callback_data: 'group_stakes'}]
+            ]
+        },
+        reply_to_message_id: msg.message_id
+       });
         }
       } else if (msg.text == "/stakes_va") {
         bot.sendMessage(msg.chat.id, '<code>Введите pubkey vote account:("stop" for exit)</code>', { parse_mode: "HTML" });
@@ -591,11 +618,17 @@ bot.on("text", async (msg) => {
             const va = addr_va.text.replace(/[^a-zA-Z0-9]/g, '');
             if (await checkkey(va)) {
               let sendmsg1 = await stakes (
-                ['none', va, process.env.RPC_MAIN]
+                ['none', va, current_params[2]]
                 );
               sendmsg = chunkString (sendmsg1, 4080);
               for (let i=0; i < sendmsg.length; i++) {
-                await bot.sendMessage(addr_va.chat.id, `<code>${sendmsg[i]}</code>`, { parse_mode: "HTML" });
+                await bot.sendMessage(addr_va.chat.id, `<code>${sendmsg[i]}</code>`, { parse_mode: "HTML",
+                reply_markup: {
+                  inline_keyboard: [
+                      [{text: 'Группировать по стэйкеру', callback_data: 'group_stakes'}]
+                  ]
+              },
+              reply_to_message_id: msg.message_id });
               }
             } else {
               bot.sendMessage(addr_va.chat.id, `<code>🔴 Voit account ${va} is not vailed.</code>`, { parse_mode: "HTML" });
@@ -613,7 +646,7 @@ bot.on("text", async (msg) => {
       } //END TIME
       else if (msg.text == "/time_test" || msg.text == "Валидатор тест") {
         sendmsg1 = await nodeinfo(
-          clusterParams.test
+            clusterParams.test
         );
         sendmsg = chunkString (sendmsg1, 4080);
         for (let i=0; i < sendmsg.length; i++) {
@@ -636,8 +669,9 @@ bot.on("text", async (msg) => {
   }
 });
 
-//Обрадотка колбэков бота
+//Обработка колбэков бота
 bot.on('callback_query', async ctx => {
+  let tasks;
   try {
     switch(ctx.data) {
       case "closeMenu":
@@ -721,6 +755,76 @@ bot.on('callback_query', async ctx => {
             }
           });
           break;
+        case "group_stakes":
+          const connection = new solanaWeb3.Connection(current_params[2]);
+          const epochInfo = await connection.getEpochInfo();
+          let arr_stake = [];
+          arrmes2.forEach((arr, index) => {
+            let tmp_obj = {};
+            tmp_obj['pub_staker'] = arr[0];
+            tmp_obj['start_epoch'] = arr[1];
+            tmp_obj['end_epoch'] = arr[2];
+            tmp_obj['stake'] = arr[3];
+            arr_stake.push(tmp_obj);
+          });
+          const groupBy = (x,f)=>x.reduce((a,b,i)=>((a[f(b,i,x)]||=[]).push(b),a),{});
+          let group_arr_stake = groupBy(arr_stake, v => v.pub_staker);
+          let newmes = [];
+          for (const [ key, values] of Object.entries(group_arr_stake)) {
+
+              const total = values.reduce(
+                function (sum, currentStake) {
+                  return sum + currentStake.stake;
+                }, 0);
+
+                let totalDeactive = 0
+                let deactiv;
+                for (let i = 0; i < values.length; i++) {
+                  const currentAccount1 = values[i];
+                  if (currentAccount1.end_epoch !== '∞') {
+                    totalDeactive += currentAccount1.stake
+                  } 
+                }
+                if (typeof totalDeactive == "undefined") { deactiv = 0; } else { deactiv = totalDeactive; }
+
+
+                let totalActive = 0
+                let activ;
+                for (let i = 0; i < values.length; i++) {
+                  const currentAccount = values[i];
+                  if (currentAccount.start_epoch == epochInfo.epoch && currentAccount.end_epoch == '∞') {
+                    totalActive += currentAccount.stake
+                  } 
+                }
+                if (typeof totalActive == "undefined") { activ = 0; } else { activ = totalActive; }
+                newmes.push([key,total,deactiv,activ])
+          }
+        let newmesM = sortArrayOfObjects(newmes, 1);
+        let newmesS = '';
+        for (let i=0; i < newmesM.length; i++) {
+          st1 = newmesM[i][0].slice(0,3);
+          st2 = newmesM[i][0].slice(-4);
+          newmesS += `${i+1}. ${st1}..${st2} ${Math.round1(newmesM[i][1], 2).toFixed(2)} -${Math.round1(newmesM[i][2], 2).toFixed(2)} +${Math.round1(newmesM[i][3], 2).toFixed(2)}\n`;
+        }
+        sendmsg = chunkString (newmesS, 4080);
+        for (let i=0; i < sendmsg.length; i++) {
+          await bot.sendMessage(ctx.message.chat.id, `<code>   Staker    Stake  Deactiv  Activ \n${sendmsg[i]}</code>`, { parse_mode: "HTML" });
+        }
+        break;
+      case "task_on":
+        task.resume();
+        await bot.deleteMessage(ctx.message.chat.id, ctx.message.message_id);
+        await bot.deleteMessage(ctx.message.reply_to_message.chat.id, ctx.message.reply_to_message.message_id);
+        tasks = task.isRunning() ? "Activ 🟢" : "Deactiv 🔴";
+        await bot.sendMessage(ctx.message.chat.id, `Autowithdraw ${process.env.autowithdraw} sol.\nStatus: ${tasks}\nNext withdraw: ${task.nextRun()}`, { parse_mode: "HTML" });
+        break;
+      case "task_off":
+        task.pause();
+        await bot.deleteMessage(ctx.message.chat.id, ctx.message.message_id);
+        await bot.deleteMessage(ctx.message.reply_to_message.chat.id, ctx.message.reply_to_message.message_id);
+        tasks = task.isRunning() ? "Activ 🟢" : "Deactiv 🔴";
+        await bot.sendMessage(ctx.message.chat.id, `Autowithdraw ${process.env.autowithdraw} sol.\nStatus: ${tasks}`, { parse_mode: "HTML" });
+        break;
       }
   }
   catch(error) {
