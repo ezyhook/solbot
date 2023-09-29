@@ -806,7 +806,7 @@ bot.on('callback_query', async ctx => {
           st2 = newmesM[i][0].slice(-4);
           newmesS += `${i+1}. ${st1}..${st2} ${Math.round1(newmesM[i][1], 2).toFixed(2)} -${Math.round1(newmesM[i][2], 2).toFixed(2)} +${Math.round1(newmesM[i][3], 2).toFixed(2)}\n`;
         }
-        sendmsg = chunkString (newmesS, 4080);
+        sendmsg = chunkString(newmesS, 4000);
         for (let i=0; i < sendmsg.length; i++) {
           await bot.sendMessage(ctx.message.chat.id, `<code>   Staker    Stake  Deactiv  Activ \n${sendmsg[i]}</code>`, { parse_mode: "HTML" });
         }
