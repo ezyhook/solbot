@@ -3,8 +3,6 @@ const { PublicKey, LAMPORTS_PER_SOL, Transaction, sendAndConfirmTransaction, Key
 const TelegramBot = require("node-telegram-bot-api");
 require("dotenv").config();
 const Datastore = require('nedb');
-const cryptojs = require("crypto-js")
-const SHA256 = require("crypto-js/sha256");
 const { Cron } = require("croner");
 
 const timeZ = "Europe/Moscow";
